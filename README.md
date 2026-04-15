@@ -1,4 +1,4 @@
-# Medical Data Streaming Pipeline 🩺
+# Version 1 (MVP) 
 ### (Python, Kafka, Spark Structured Streaming, InfluxDB, Grafana)
 
 ## Contents

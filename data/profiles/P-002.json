@@ -1,0 +1,12 @@
+{
+  "patient_id": "P-002",
+  "condition": "hypertensive",
+  "baselines": {
+    "heart_rate":       { "mean": 80,  "std": 8 },
+    "spo2":             { "mean": 97,  "std": 1.0 },
+    "systolic_bp":      { "mean": 158, "std": 15 },
+    "diastolic_bp":     { "mean": 98,  "std": 10 },
+    "respiratory_rate": { "mean": 16,  "std": 2 },
+    "temperature":      { "mean": 36.8,"std": 0.2 }
+  }
+}

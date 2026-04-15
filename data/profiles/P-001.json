@@ -1,0 +1,12 @@
+{
+  "patient_id": "P-001",
+  "condition": "post_surgery",
+  "baselines": {
+    "heart_rate":       { "mean": 88,  "std": 10 },
+    "spo2":             { "mean": 96,  "std": 1.5 },
+    "systolic_bp":      { "mean": 130, "std": 12 },
+    "diastolic_bp":     { "mean": 82,  "std": 8 },
+    "respiratory_rate": { "mean": 18,  "std": 2 },
+    "temperature":      { "mean": 37.2,"std": 0.3 }
+  }
+}

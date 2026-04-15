@@ -1,0 +1,12 @@
+{
+  "patient_id": "P-004",
+  "condition": "pediatric",
+  "baselines": {
+    "heart_rate":       { "mean": 95,  "std": 12 },
+    "spo2":             { "mean": 99,  "std": 0.5 },
+    "systolic_bp":      { "mean": 100, "std": 8 },
+    "diastolic_bp":     { "mean": 65,  "std": 6 },
+    "respiratory_rate": { "mean": 22,  "std": 3 },
+    "temperature":      { "mean": 36.9,"std": 0.3 }
+  }
+}

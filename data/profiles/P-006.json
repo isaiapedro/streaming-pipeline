@@ -1,0 +1,12 @@
+{
+  "patient_id": "P-006",
+  "condition": "critical_icu",
+  "baselines": {
+    "heart_rate":       { "mean": 110, "std": 20 },
+    "spo2":             { "mean": 92,  "std": 3.0 },
+    "systolic_bp":      { "mean": 88,  "std": 20 },
+    "diastolic_bp":     { "mean": 55,  "std": 12 },
+    "respiratory_rate": { "mean": 26,  "std": 4 },
+    "temperature":      { "mean": 38.8,"std": 0.5 }
+  }
+}

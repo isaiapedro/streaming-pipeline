@@ -1,0 +1,27 @@
+# For self-hosted Grafana: place this file at
+#   grafana/provisioning/datasources/influxdb.yml
+# and set the env vars below before starting Grafana.
+#
+# For Grafana Cloud: add the datasource manually at
+#   Connections → Data sources → Add → InfluxDB
+#   Query language: Flux
+#   URL: <your InfluxDB Cloud URL>
+#   Organization / Token / Default bucket as below.
+
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB Cloud
+    type: influxdb
+    uid: influxdb-cloud
+    access: proxy
+    url: ${INFLUX_URL}
+    jsonData:
+      version: Flux
+      organization: ${INFLUX_ORG}
+      defaultBucket: ${INFLUX_BUCKET}
+      tlsSkipVerify: false
+    secureJsonData:
+      token: ${INFLUX_TOKEN}
+    isDefault: true
+    editable: false

@@ -1,0 +1,12 @@
+{
+  "patient_id": "P-005",
+  "condition": "elderly",
+  "baselines": {
+    "heart_rate":       { "mean": 68,  "std": 8 },
+    "spo2":             { "mean": 95,  "std": 1.5 },
+    "systolic_bp":      { "mean": 145, "std": 18 },
+    "diastolic_bp":     { "mean": 78,  "std": 10 },
+    "respiratory_rate": { "mean": 17,  "std": 2 },
+    "temperature":      { "mean": 36.5,"std": 0.3 }
+  }
+}

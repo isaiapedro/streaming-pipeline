@@ -1,0 +1,12 @@
+{
+  "patient_id": "P-003",
+  "condition": "healthy_adult",
+  "baselines": {
+    "heart_rate":       { "mean": 72,  "std": 8 },
+    "spo2":             { "mean": 98,  "std": 0.8 },
+    "systolic_bp":      { "mean": 118, "std": 10 },
+    "diastolic_bp":     { "mean": 76,  "std": 6 },
+    "respiratory_rate": { "mean": 14,  "std": 2 },
+    "temperature":      { "mean": 36.8,"std": 0.2 }
+  }
+}

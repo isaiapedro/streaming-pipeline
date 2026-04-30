@@ -13,7 +13,6 @@ print("Starting to transmit vitals. Press Ctrl+C to stop.")
 
 while True:
     # 2. Generate mock data
-    # We create a random heart rate. If it's over 100, our Spark job will later flag it!
     data = {
         "patient_id": "P-001",
         "heart_rate": random.randint(60, 120),
@@ -26,7 +25,7 @@ while True:
     
     # 4. Send to Kafka
     producer.produce(topic, value=json_payload)
-    producer.flush() # Force the message to be sent immediately
+    producer.flush()
     
     print(f"Sent: {data}")
-    time.sleep(2) # Wait 2 seconds before the next reading
+    time.sleep(2)

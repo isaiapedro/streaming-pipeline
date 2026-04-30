@@ -231,8 +231,17 @@ SIGNAL_THRESHOLDS = {
 
 ## Verification
 
-1. `docker compose up` → NATS JetStream healthy
-2. `python producer/main.py` → 6 patients publishing (`nats sub 'vitals.>'` shows messages)
-3. `python brain/main.py` → alarm_level appearing in InfluxDB Cloud
-4. Grafana Cloud dashboard auto-provisioned, state timeline shows alarm transitions
-5. Force a critical reading (set baseline above threshold in a profile) → Grafana alert fires
+1. Start NATS JetStream
+`docker compose up -d`
+2. Init NATS streams (first time only)
+`bash scripts/create_streams.sh`
+3. Start the Brain (consumer + InfluxDB writer)
+`PYTHONPATH=. python3 brain/main.py` 
+4. Start the Producer (6 patients publishing vitals)
+`PYTHONPATH=. python3 producer/main.py`
+5. Verify messages flowing
+`nats sub 'vitals.>'`
+```
+sudo mv ./nats /usr/local/bin/
+nats --version
+```

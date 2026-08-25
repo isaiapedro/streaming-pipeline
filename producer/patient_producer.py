@@ -26,6 +26,7 @@ from data.generators.temperature import TemperatureGenerator
 from data.generators.correlation import correlated_delta
 from data.generators.noise import NoiseInjector
 from data.scenarios.definitions import Scenario
+from producer.mqtt_producer import MqttPublisher
 
 log = logging.getLogger(__name__)
 
@@ -51,12 +52,14 @@ class PatientProducer:
         signal_seed: int | None = None,
         noise_injector: NoiseInjector | None = None,
         scenario: Scenario | None = None,
+        mqtt: MqttPublisher | None = None,
     ) -> None:
         self.patient_id: str = profile["patient_id"]
         self._profile = profile
         self._js = js
         self._noise = noise_injector
         self._scenario = scenario
+        self._mqtt = mqtt
         self._start_ms: int | None = None
         # Distinct seeds per signal (derived from one base seed) keep signals
         # decorrelated at the RNG level — correlation is applied explicitly.
@@ -130,11 +133,17 @@ class PatientProducer:
                     payload["onset_offset_ms"] = self._scenario.onset_offset_ms
 
                 subject = f"vitals.{self.patient_id}.{signal_type}"
+                encoded = json.dumps(payload).encode()
                 try:
-                    await self._js.publish(subject, json.dumps(payload).encode())
+                    await self._js.publish(subject, encoded)
                     log.debug("%s → %s", subject, publish_value)
                 except Exception as exc:
-                    log.warning("Publish failed for %s: %s", subject, exc)
+                    log.warning("NATS publish failed for %s: %s", subject, exc)
+                if self._mqtt is not None:
+                    try:
+                        self._mqtt.publish(subject, encoded)
+                    except Exception as exc:
+                        log.warning("MQTT publish failed for %s: %s", subject, exc)
             else:
                 log.debug("%s dropped (noise injection)", signal_type)
 

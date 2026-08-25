@@ -18,6 +18,7 @@ from nats.errors import TimeoutError as NatsTimeout
 
 from config.settings import NATS_URL
 from brain.approaches import APPROACH_B, APPROACH_C, BatchScheduler, score_composite
+from brain.config_watcher import watch_thresholds
 from brain.evaluator import evaluate_message
 from brain.ews_window import PatientEWSState
 from brain.influx_writer import InfluxWriter, VitalRecord, AlarmRecord
@@ -129,6 +130,10 @@ async def main() -> None:
     # Durable pull consumer — survives brain restarts, picks up where it left off
     sub = await js.pull_subscribe("vitals.>", durable="BRAIN", stream="VITALS")
 
+    # Bidirectional config push — hot-reloads SIGNAL_THRESHOLDS from
+    # JetStream KV without restarting the brain (see brain/config_watcher.py)
+    config_task = asyncio.create_task(watch_thresholds(js), name="config-watcher")
+
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
 
@@ -157,6 +162,7 @@ async def main() -> None:
             processed += 1
 
     log.info("Processed %d messages total. Shutting down.", processed)
+    config_task.cancel()
     await writer.stop()
     try:
         await asyncio.wait_for(nc.drain(), timeout=5.0)

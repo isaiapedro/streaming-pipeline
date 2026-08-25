@@ -20,6 +20,7 @@ import nats
 from config.settings import NATS_URL
 from data.generators.noise import NoiseConfig, NoiseInjector
 from data.scenarios.definitions import SCENARIOS
+from producer.mqtt_producer import MqttPublisher
 from producer.patient_producer import PatientProducer
 
 logging.basicConfig(
@@ -55,6 +56,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--dropout-probability", type=float, default=0.0)
     parser.add_argument("--dropout-duration-s", type=float, default=0.0)
     parser.add_argument("--clock-drift-ms", type=int, default=0)
+    parser.add_argument("--dual-mqtt", action="store_true",
+                         help="Also publish every message to MQTT (Mosquitto) for the NATS-vs-MQTT comparison")
+    parser.add_argument("--mqtt-host", default="localhost")
+    parser.add_argument("--mqtt-port", type=int, default=1883)
     return parser.parse_args()
 
 
@@ -78,6 +83,11 @@ async def main() -> None:
     nc = await nats.connect(NATS_URL)
     js = nc.jetstream()
 
+    mqtt_publisher = None
+    if args.dual_mqtt:
+        log.info("Dual-publishing to MQTT at %s:%d", args.mqtt_host, args.mqtt_port)
+        mqtt_publisher = MqttPublisher(args.mqtt_host, args.mqtt_port)
+
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
 
@@ -94,6 +104,7 @@ async def main() -> None:
             signal_seed=None if args.signal_seed is None else args.signal_seed + i * 100,
             noise_injector=NoiseInjector(noise_config, None if args.noise_seed is None else args.noise_seed + i),
             scenario=scenario,
+            mqtt=mqtt_publisher,
         )
         for i, profile in enumerate(profiles)
     ]
@@ -108,6 +119,8 @@ async def main() -> None:
     await asyncio.gather(*tasks, return_exceptions=True)
 
     await nc.drain()
+    if mqtt_publisher is not None:
+        mqtt_publisher.close()
     log.info("NATS connection closed. Bye.")
 
 

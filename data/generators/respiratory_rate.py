@@ -1,4 +1,3 @@
-import random
 from .base_generator import BaseGenerator
 
 _DRIFT   = 0.1
@@ -16,7 +15,7 @@ class RespiratoryRateGenerator(BaseGenerator):
     def generate(self, timestamp: int) -> int:
         # Poisson-like: step is ±1 or 0, biased toward mean
         reversion = _DRIFT * (self._mean - self._current)
-        step = random.choice([-1, 0, 0, 1])  # integer steps
+        step = self._rng.choice([-1, 0, 0, 1])  # integer steps
         self._current += step + reversion
         self._current = max(_MIN, min(_MAX, self._current))
         return int(round(self._current))

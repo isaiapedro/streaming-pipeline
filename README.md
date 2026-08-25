@@ -98,13 +98,13 @@ tcc/
 
 ### Signal generation — parametric synthetic (not random uniform)
 
-| Signal | Method | Publish rate |
-|---|---|---|
-| Heart Rate | Gaussian random walk around patient baseline | 1/2s |
-| SpO2 | Beta-distributed, rare desaturations | 1/2s |
-| Blood Pressure | Correlated systolic/diastolic pair | 1/5s |
-| Respiratory Rate | Poisson-like integer | 1/4s |
-| Temperature | Slow walk, circadian variation | 1/10s |
+| Signal           | Method                                       | Publish rate |
+| ---------------- | -------------------------------------------- | ------------ |
+| Heart Rate       | Gaussian random walk around patient baseline | 1/2s         |
+| SpO2             | Beta-distributed, rare desaturations         | 1/2s         |
+| Blood Pressure   | Correlated systolic/diastolic pair           | 1/5s         |
+| Respiratory Rate | Poisson-like integer                         | 1/4s         |
+| Temperature      | Slow walk, circadian variation               | 1/10s        |
 
 ### Patient profiles (`data/profiles/P-00X.json`)
 
@@ -225,8 +225,7 @@ SIGNAL_THRESHOLDS = {
 ## Critical Files
 
 - [docker-compose.yml](docker-compose.yml) — NATS JetStream only (remove Kafka/Zookeeper)
-- [producer.py](producer.py) → `producer/patient_producer.py` — async NATS publisher
-- [spark_processor.py](spark_processor.py) → `brain/` — evaluator + influx_writer (no Spark)
+- Legacy `producer.py` / `spark_processor.py` (Kafka MVP) removed — fully migrated to `producer/patient_producer.py` (async NATS publisher) and `brain/` (evaluator + influx_writer, no Spark)
 - **New**: `config/settings.py`, `config/thresholds.py`, `data/generators/`, `data/profiles/`, `grafana/provisioning/`
 
 ## Verification

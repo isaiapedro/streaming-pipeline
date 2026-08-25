@@ -1,4 +1,3 @@
-import random
 from .base_generator import BaseGenerator
 
 _WALK_SIGMA_SYS = 2.0
@@ -21,10 +20,10 @@ class BloodPressureGenerator(BaseGenerator):
         self._dia = float(self._dia_mean)
 
     def generate(self, timestamp: int) -> dict:
-        shared = random.gauss(0, 1.0)  # correlated component
+        shared = self._rng.gauss(0, 1.0)  # correlated component
 
-        sys_step = _CORRELATION * shared + (1 - _CORRELATION) * random.gauss(0, 1.0)
-        dia_step = _CORRELATION * shared + (1 - _CORRELATION) * random.gauss(0, 1.0)
+        sys_step = _CORRELATION * shared + (1 - _CORRELATION) * self._rng.gauss(0, 1.0)
+        dia_step = _CORRELATION * shared + (1 - _CORRELATION) * self._rng.gauss(0, 1.0)
 
         self._sys += sys_step * _WALK_SIGMA_SYS + _DRIFT * (self._sys_mean - self._sys)
         self._dia += dia_step * _WALK_SIGMA_DIA + _DRIFT * (self._dia_mean - self._dia)

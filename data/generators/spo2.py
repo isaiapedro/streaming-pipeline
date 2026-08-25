@@ -1,4 +1,3 @@
-import random
 from .base_generator import BaseGenerator
 
 _DESAT_PROB  = 0.02   # 2 % chance of starting a desaturation event each step
@@ -21,14 +20,14 @@ class SpO2Generator(BaseGenerator):
 
     def generate(self, timestamp: int) -> float:
         # Trigger a new desaturation event
-        if self._desat_target is None and random.random() < _DESAT_PROB:
-            drop = random.uniform(2.0, _DESAT_DROP)
+        if self._desat_target is None and self._rng.random() < _DESAT_PROB:
+            drop = self._rng.uniform(2.0, _DESAT_DROP)
             self._desat_target = max(_MIN, self._current - drop)
 
         if self._desat_target is not None:
             # Move toward the desat nadir
             if self._current > self._desat_target + 0.5:
-                self._current -= random.uniform(0.5, 1.5)
+                self._current -= self._rng.uniform(0.5, 1.5)
             else:
                 # Recovery phase
                 self._current += _RECOVERY
@@ -36,7 +35,7 @@ class SpO2Generator(BaseGenerator):
                     self._desat_target = None
         else:
             # Normal random walk with mean-reversion
-            step = random.gauss(0, _WALK_SIGMA)
+            step = self._rng.gauss(0, _WALK_SIGMA)
             reversion = _DRIFT * (self._mean - self._current)
             self._current += step + reversion
 

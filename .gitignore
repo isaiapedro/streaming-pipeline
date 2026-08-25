@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+tcc_env/
+benchmark_results.csv
+.env

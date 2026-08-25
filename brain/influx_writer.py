@@ -27,16 +27,37 @@ class VitalRecord:
     alarm_level: str
     value:       float
     timestamp_ms: int
+    scoring_approach: str = "A"
+    scenario_id: str = "none"
+
+
+@dataclass
+class AlarmRecord:
+    """Composite NEWS2 alarm event (Approach B/C) — separate measurement from
+    per-signal vitals since it carries an aggregate score, not a raw reading.
+    """
+    patient_id:  str
+    condition:   str
+    alarm_level: str
+    scoring_approach: str
+    news2_score: int
+    scenario_id: str
+    timestamp_ms: int
 
 
 class InfluxWriter:
     def __init__(self) -> None:
-        self._buffer: list[VitalRecord] = []
+        self._buffer: list[VitalRecord | AlarmRecord] = []
         self._lock = asyncio.Lock()
         self._client: InfluxDBClientAsync | None = None
         self._task:   asyncio.Task | None = None
 
     async def start(self) -> None:
+        if not INFLUX_TOKEN or not INFLUX_URL or not INFLUX_ORG or not INFLUX_BUCKET:
+            raise RuntimeError(
+                "Missing InfluxDB config — set INFLUX_URL/INFLUX_TOKEN/INFLUX_ORG/INFLUX_BUCKET "
+                "in workspace/academic/.env (see .env for setup notes)."
+            )
         self._client = InfluxDBClientAsync(
             url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG
         )
@@ -56,7 +77,7 @@ class InfluxWriter:
             await self._client.close()
         log.info("InfluxWriter stopped.")
 
-    async def enqueue(self, record: VitalRecord) -> None:
+    async def enqueue(self, record: "VitalRecord | AlarmRecord") -> None:
         async with self._lock:
             self._buffer.append(record)
             should_flush = len(self._buffer) >= FLUSH_BUFFER_SIZE
@@ -83,13 +104,26 @@ class InfluxWriter:
             log.error("InfluxDB write failed (%d records dropped): %s", len(batch), exc)
 
 
-def _to_point(r: VitalRecord) -> Point:
+def _to_point(r: "VitalRecord | AlarmRecord") -> Point:
+    if isinstance(r, AlarmRecord):
+        return (
+            Point("alarms")
+            .tag("patient_id",       r.patient_id)
+            .tag("condition",        r.condition)
+            .tag("alarm_level",      r.alarm_level)
+            .tag("scoring_approach", r.scoring_approach)
+            .tag("scenario_id",      r.scenario_id)
+            .field("news2_score",    r.news2_score)
+            .time(r.timestamp_ms * 1_000_000)
+        )
     return (
         Point("patient_vitals")
-        .tag("patient_id",  r.patient_id)
-        .tag("signal_type", r.signal_type)
-        .tag("condition",   r.condition)
-        .tag("alarm_level", r.alarm_level)
-        .field("value",     r.value)
+        .tag("patient_id",       r.patient_id)
+        .tag("signal_type",      r.signal_type)
+        .tag("condition",        r.condition)
+        .tag("alarm_level",      r.alarm_level)
+        .tag("scoring_approach", r.scoring_approach)
+        .tag("scenario_id",      r.scenario_id)
+        .field("value",          r.value)
         .time(r.timestamp_ms * 1_000_000)   # ms → ns for InfluxDB line protocol
     )

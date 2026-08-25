@@ -1,4 +1,3 @@
-import random
 from .base_generator import BaseGenerator
 
 _WALK_SIGMA = 1.5   # step size per reading (bpm)
@@ -17,7 +16,7 @@ class HeartRateGenerator(BaseGenerator):
 
     def generate(self, timestamp: int) -> float:
         # Random walk step
-        step = random.gauss(0, _WALK_SIGMA)
+        step = self._rng.gauss(0, _WALK_SIGMA)
         # Mean-reversion: nudge back toward baseline
         reversion = _DRIFT * (self._mean - self._current)
         self._current += step + reversion

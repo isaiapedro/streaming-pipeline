@@ -1,6 +1,5 @@
 import math
 from .base_generator import BaseGenerator
-import random
 
 _WALK_SIGMA  = 0.05   # slow drift per reading (°C)
 _DRIFT       = 0.03
@@ -25,7 +24,7 @@ class TemperatureGenerator(BaseGenerator):
         # Peak at hour 18 (18:00), trough at 06:00 — shift by -6h from cosine peak
         circadian = _CIRCADIAN_A * math.sin(2 * math.pi * (hour_of_day - 6) / 24)
 
-        step = random.gauss(0, _WALK_SIGMA)
+        step = self._rng.gauss(0, _WALK_SIGMA)
         reversion = _DRIFT * (self._mean - self._current)
         self._current += step + reversion
 

@@ -4,7 +4,7 @@
 
 Building a real-time patient vitals monitoring system in two scopes:
 - **MVP (6 patients)**: Lean distributed pipeline — NATS JetStream edge buffer + async Python processing + InfluxDB Cloud + Grafana Cloud
-- **Research comparison**: Isolated local Kafka + Schema Registry path using the same Protobuf contract
+- **Research comparison**: Isolated validation-only Kafka + Schema Registry path using the same Protobuf contract
 - **Research scope (500 patients)**: Full hospital-scale deployment with Kafka, Spark, and compression — future work, not implemented
 
 ---
@@ -148,6 +148,13 @@ it can update an EWS window. Malformed or structurally invalid messages are
 published as `DeadLetterEnvelope` records to `dlq.vitals.nats` in the separate
 `VITALS_DLQ` stream, so rejection traffic cannot be consumed as vital input.
 
+The optional MQTT mirror uses `vitals/{patient_id}/{signal_type}` and a bounded
+`vitals/#` subscription. It maps that topic to the same dotted identity check.
+Invalid MQTT input is published to `dlq/vitals/mqtt` with QoS 1 and receives a
+PUBACK before the source message is acknowledged. PUBACK establishes broker
+receipt only; no durable MQTT DLQ archive is claimed. NATS and MQTT publication
+are independent rather than an atomic dual-write.
+
 Run the local NEWS2 alarm path separately with:
 
 ```bash
@@ -162,6 +169,11 @@ the default, and Scale 2 is selected only through an explicit
 from `copd_flag`. Generate a development TLS certificate before
 a secured deployment with `bash scripts/generate_dev_tls.sh`; certificates and
 credentials are intentionally not tracked.
+
+`alarms.>` is retained in the file-backed `ALARMS` stream for seven days, and
+its JetStream publish acknowledgement precedes source acknowledgement. The
+scorer window is memory-only and there is no notification consumer, so this is
+not a restart-continuity or external-delivery claim.
 
 For the secure NATS profile, create a local `.env` containing unique `NATS_USER`,
 `NATS_PASSWORD`, `NATS_TLS=true`, `NATS_CA_FILE=./nats/certs/nats-cert.pem`,
@@ -183,7 +195,7 @@ python scripts/validate_distributions.py --reference reference.csv \
   --out-dir distribution_validation
 ```
 
-### Isolated Kafka/Schema Registry comparison
+### Isolated Kafka/Schema Registry validation comparison
 
 Kafka is an opt-in research transport and does not replace the NATS MVP entry
 points. It uses Schema Registry-framed Protobuf on `vitals.protobuf.v1` and
@@ -191,6 +203,12 @@ points. It uses Schema Registry-framed Protobuf on `vitals.protobuf.v1` and
 keys, idempotent production, and explicit consumer commits. Runtime schema
 auto-registration is disabled; provisioning owns registration and compatibility
 checks.
+
+The shipped consumer validates and prints records. It does not invoke Brain
+scoring, the SQLite outbox, InfluxDB, or alarm emission. The parity command
+compares valid/invalid transport acceptance and local latency only—not runtime,
+storage, alarm, or clinical outcome parity. `--count 20` publishes 20 valid
+records plus one intentional poison record per transport.
 
 The fixed loopback ports `19092` (Kafka) and `18081` (Schema Registry) are
 reserved to the Academic workspace in the root port registry.
@@ -317,3 +335,11 @@ the canonical guide for environment setup, feature behavior, ports,
 acknowledgement semantics, infrastructure profiles, evidence reproduction, and
 maintenance. Governance and remaining acceptance work are defined in
 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md).
+
+The complete implementation summary, historical verification context,
+outstanding decisions, and unfinished work are consolidated in
+[IMPLEMENTED.md](IMPLEMENTED.md). Accepted standards are recorded in
+[DECISIONS.md](DECISIONS.md), and runtime telemetry/privacy requirements remain
+in [TELEMETRY_CONTRACT.md](TELEMETRY_CONTRACT.md). Milestone and worker reports
+are intentionally not retained after their unique findings have been folded
+into these authorities.

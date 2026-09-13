@@ -8,7 +8,12 @@ from confluent_kafka.schema_registry.error import SchemaRegistryError
 from brain.validation import ValidationError, ValidVital
 from kafka_path.settings import KafkaSettings
 from kafka_path.topic_contracts import DLQ_TOPIC, VITALS_TOPIC
-from kafka_path.transport import KafkaCodec, KafkaVitalConsumer, KafkaVitalProducer
+from kafka_path.transport import (
+    KafkaCodec,
+    KafkaPollResult,
+    KafkaVitalConsumer,
+    KafkaVitalProducer,
+)
 from schema import vitals_pb2
 
 
@@ -218,6 +223,20 @@ def test_handler_failure_is_not_dead_lettered_or_committed():
     assert dlq.calls == []
 
 
+def test_poll_result_distinguishes_empty_from_rejected_record():
+    empty = KafkaVitalConsumer(
+        {"P-001": {}}, _settings(), consumer=FakeConsumer(),
+        dlq_producer=FakeProducer(), codec=FakeCodec(decoded=_vital_message()),
+    )
+    rejected = KafkaVitalConsumer(
+        {"P-001": {}}, _settings(), consumer=FakeConsumer(FakeMessage(b"bad")),
+        dlq_producer=FakeProducer(), codec=FakeCodec(error=ValidationError("bad")),
+    )
+
+    assert empty.poll_result(lambda _vital: None) is KafkaPollResult.EMPTY
+    assert rejected.poll_result(lambda _vital: None) is KafkaPollResult.REJECTED
+
+
 def test_invalid_payload_is_dead_lettered_before_commit():
     operations = []
     message = FakeMessage(b"not-protobuf")
@@ -329,6 +348,12 @@ def test_kafka_group_id_cannot_be_empty():
         KafkaSettings(group_id="")
 
 
+def test_kafka_environment_cannot_bypass_provisioned_topic_contract(monkeypatch):
+    monkeypatch.setenv("KAFKA_VITALS_TOPIC", "unmanaged-topic")
+    with pytest.raises(ValueError, match="fixed by the provisioned research contract"):
+        KafkaSettings.from_env()
+
+
 def test_kafka_handler_must_finish_synchronously_before_commit():
     operations = []
     raw_consumer = FakeConsumer(operations=operations)
@@ -352,6 +377,11 @@ def test_kafka_topic_contracts_accept_expected_descriptions():
     DLQ_TOPIC.assert_describe(
         "Topic: vitals.dlq.protobuf.v1 PartitionCount: 1 ReplicationFactor: 1 "
         "Configs: cleanup.policy=compact,delete,retention.ms=86400000"
+    )
+    DLQ_TOPIC.assert_describe(
+        "Topic: vitals.dlq.protobuf.v1 PartitionCount: 1 ReplicationFactor: 1 "
+        "Configs: retention.ms=86400000,min.insync.replicas=1, "
+        "cleanup.policy=delete,compact"
     )
 
 

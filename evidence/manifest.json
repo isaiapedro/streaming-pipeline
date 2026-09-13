@@ -19,13 +19,10 @@
         "exists": true,
         "path": "evidence/experiment_runs.jsonl",
         "record_count": 150,
-        "sha256": "ab0a4d1a21eee6a20593a44ba88492ed90d46a6724506c5a1563a1a830bdf4cb"
+        "sha256": "f0d9aed0f3c7f83ebcaa1346e7b905404b6e3c892d766a373287f38d81bcfe84"
       },
-      "validation_errors": [
-        "run log was generated from a dirty or unknown worktree",
-        "run log commit does not match the manifest commit"
-      ],
-      "validation_status": "development_only"
+      "validation_errors": [],
+      "validation_status": "valid"
     },
     "confidence_interval": "Wilson 95% interval for run probabilities; deterministic 2,000-resample bootstrap 95% interval for metric means",
     "design": "fully crossed 5 x 5 signal/noise seeds; identical cells for A/B/C",
@@ -85,7 +82,7 @@
     ]
   },
   "code": {
-    "commit": "7fa9cbe821fbf495caea1eb6755dabba7e329f6e",
+    "commit": "f3b61692368eef23ca3a437b148a018589e83015",
     "note": "Final measurements must be rerun after the worktree is clean when worktree_dirty is true.",
     "worktree_dirty": true
   },
@@ -133,7 +130,7 @@
     "status": "unexecuted",
     "transformation_method": null
   },
-  "generated_at_utc": "2026-09-13T22:49:32.939386+00:00",
+  "generated_at_utc": "2026-09-13T22:53:20.956003+00:00",
   "live_experiments": {
     "benchmark_run_provenance": {
       "artifact": "evidence/experiment_runs.jsonl",
@@ -166,10 +163,7 @@
   "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
   "release": {
     "blockers": [
-      "run log was generated from a dirty or unknown worktree",
-      "run log commit does not match the manifest commit",
-      "worktree is dirty",
-      "installed environment does not exactly match every pinned requirement"
+      "worktree is dirty"
     ],
     "eligible_for_final_release": false,
     "policy": "Development mode records blockers; final mode exits without overwriting the manifest when any blocker exists.",
@@ -368,10 +362,10 @@
       },
       {
         "expected_version": "1.0.1",
-        "installed_version": "1.2.3",
+        "installed_version": "1.0.1",
         "package": "python-dotenv",
         "requirement": "python-dotenv==1.0.1",
-        "status": "mismatch"
+        "status": "exact"
       },
       {
         "expected_version": "4.1.0",
@@ -417,11 +411,9 @@
       }
     ],
     "dependency_validation": {
-      "issue_count": 1,
-      "issues": [
-        "python-dotenv==1.0.1"
-      ],
-      "status": "mismatch"
+      "issue_count": 0,
+      "issues": [],
+      "status": "exact"
     },
     "machine": {
       "architecture": "x86_64",

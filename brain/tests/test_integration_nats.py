@@ -23,6 +23,7 @@ from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 
 from brain.approaches import BatchScheduler
 from brain.main import _process
+from brain.local_scorer import _process as process_local_alarm
 from brain.influx_writer import InfluxWriter
 from config.settings import nats_connection_options
 from brain.validation import DLQ_SUBJECT
@@ -182,6 +183,81 @@ async def test_invalid_nats_payload_is_dead_lettered_before_scoring():
             try:
                 stream = "VITALS" if name == durable else "VITALS_DLQ"
                 await js.delete_consumer(stream, name)
+            except Exception:
+                pass
+        await nc.close()
+
+
+@pytest.mark.asyncio
+async def test_local_scorer_publishes_to_declared_alarms_stream():
+    nc = await _try_connect()
+    if nc is None:
+        _skip_or_fail("NATS not reachable for ALARMS integration test")
+    js = nc.jetstream()
+    suffix = uuid4().hex[:12]
+    patient_id = f"P-ALARM-{suffix}"
+    source_durable = f"LOCAL_ALARM_TEST_{suffix}"
+    alarm_durable = f"ALARM_READER_TEST_{suffix}"
+    source_subject = f"vitals.{patient_id}.>"
+    alarm_subject = f"alarms.{patient_id}.>"
+    readings = {
+        "heart_rate": 135,
+        "spo2": 85,
+        "respiratory_rate": 28,
+        "blood_pressure": {"systolic": 190, "diastolic": 70},
+        "temperature": 39.2,
+    }
+    try:
+        source_sub = await js.pull_subscribe(
+            source_subject, durable=source_durable, stream="VITALS"
+        )
+        alarm_sub = await js.pull_subscribe(
+            alarm_subject,
+            durable=alarm_durable,
+            stream="ALARMS",
+            config=ConsumerConfig(
+                deliver_policy=DeliverPolicy.NEW,
+                ack_policy=AckPolicy.EXPLICIT,
+            ),
+        )
+        timestamp = int(time.time() * 1000)
+        for signal_type, value in readings.items():
+            payload = vitals_pb2.VitalSign(
+                patient_id=patient_id,
+                signal_type=signal_type,
+                timestamp_ms=timestamp,
+                schema_version="1",
+                pipeline_version="test",
+            )
+            if signal_type == "blood_pressure":
+                payload.bp.systolic = value["systolic"]
+                payload.bp.diastolic = value["diastolic"]
+            else:
+                payload.scalar_value = value
+            await js.publish(
+                f"vitals.{patient_id}.{signal_type}", payload.SerializeToString()
+            )
+        states = {}
+        for message in await source_sub.fetch(len(readings), timeout=5):
+            await process_local_alarm(
+                message,
+                {patient_id: {"condition": "synthetic", "news2_spo2_scale": 1}},
+                states,
+                js,
+            )
+        alarm = (await alarm_sub.fetch(1, timeout=5))[0]
+        event = vitals_pb2.AlertEvent()
+        event.ParseFromString(alarm.data)
+        assert event.patient_id == patient_id
+        assert event.priority == "high"
+        await alarm.ack()
+    finally:
+        for stream, durable in (
+            ("VITALS", source_durable),
+            ("ALARMS", alarm_durable),
+        ):
+            try:
+                await js.delete_consumer(stream, durable)
             except Exception:
                 pass
         await nc.close()

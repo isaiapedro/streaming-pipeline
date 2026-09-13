@@ -42,11 +42,24 @@ class KafkaSettings:
 
     @classmethod
     def from_env(cls) -> "KafkaSettings":
+        overridden_topics = [
+            name
+            for name, expected in (
+                ("KAFKA_VITALS_TOPIC", cls.vitals_topic),
+                ("KAFKA_DLQ_TOPIC", cls.dlq_topic),
+            )
+            if os.getenv(name, expected) != expected
+        ]
+        if overridden_topics:
+            raise ValueError(
+                "Kafka topic names are fixed by the provisioned research contract; "
+                f"unsupported overrides: {', '.join(overridden_topics)}"
+            )
         return cls(
             bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", cls.bootstrap_servers),
             schema_registry_url=os.getenv("SCHEMA_REGISTRY_URL", cls.schema_registry_url),
-            vitals_topic=os.getenv("KAFKA_VITALS_TOPIC", cls.vitals_topic),
-            dlq_topic=os.getenv("KAFKA_DLQ_TOPIC", cls.dlq_topic),
+            vitals_topic=cls.vitals_topic,
+            dlq_topic=cls.dlq_topic,
             group_id=os.getenv("KAFKA_GROUP_ID", cls.group_id),
             compatibility=os.getenv("KAFKA_SCHEMA_COMPATIBILITY", cls.compatibility).upper(),
         )

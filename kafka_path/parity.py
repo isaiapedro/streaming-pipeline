@@ -19,7 +19,7 @@ from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 import nats
-from confluent_kafka import Consumer, Producer, TopicPartition
+from confluent_kafka import Consumer, KafkaException, Producer, TopicPartition
 from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 
 from brain.validation import (
@@ -31,13 +31,21 @@ from brain.validation import (
 )
 from config.settings import SCHEMA_VERSION, nats_connection_options
 from kafka_path.settings import KafkaSettings
-from kafka_path.transport import KafkaVitalConsumer, KafkaVitalProducer
+from kafka_path.transport import (
+    KafkaVitalConsumer,
+    KafkaVitalProducer,
+    _produce_and_wait,
+)
 from schema import vitals_pb2
 
 
 SYNTHETIC_PATIENT = "P-TRANSPORT-PARITY"
 FIELDS = ("transport", "published", "accepted", "rejected", "p50_ms", "p99_ms")
 POISON_PAYLOAD = b"transport-parity-invalid-protobuf"
+
+
+def _poison_payload(messages: Sequence[vitals_pb2.VitalSign]) -> bytes:
+    return POISON_PAYLOAD + b":" + str(messages[0].timestamp_ms).encode()
 
 
 @dataclass(frozen=True)
@@ -167,6 +175,7 @@ async def _run_nats_async(
     latencies: list[float | None] = []
     published = 0
     deadline = time.monotonic() + timeout_s
+    poison_payload = _poison_payload(messages)
     try:
         subscription = await js.pull_subscribe(
             subject,
@@ -181,7 +190,7 @@ async def _run_nats_async(
             published_at[message.timestamp_ms] = time.perf_counter_ns()
             await js.publish(subject, message.SerializeToString())
             published += 1
-        await js.publish(subject, POISON_PAYLOAD)
+        await js.publish(subject, poison_payload)
         published += 1
         while len(latencies) < published and time.monotonic() < deadline:
             remaining = max(0.01, deadline - time.monotonic())
@@ -197,9 +206,8 @@ async def _run_nats_async(
                     source_subject=subject,
                 )
                 started = published_at.get(vital.timestamp_ms)
-                latencies.append(
-                    None if started is None else (time.perf_counter_ns() - started) / 1_000_000
-                )
+                if started is not None:
+                    latencies.append((time.perf_counter_ns() - started) / 1_000_000)
             except ValidationError as error:
                 await js.publish(
                     DLQ_SUBJECT,
@@ -211,7 +219,8 @@ async def _run_nats_async(
                     ),
                     headers={"Nats-Msg-Id": dead_letter_message_id(record.data, subject)},
                 )
-                latencies.append(None)
+                if record.data == poison_payload:
+                    latencies.append(None)
             await record.ack()
     finally:
         try:
@@ -242,10 +251,9 @@ def run_kafka(messages: Sequence[vitals_pb2.VitalSign], timeout_s: float) -> Tra
     accepted: dict[int, float] = {}
     observed = 0
     published = 0
+    poison_payload = _poison_payload(messages)
 
     def observe(vital) -> None:
-        nonlocal observed
-        observed += 1
         started = published_at.get(vital.timestamp_ms)
         if vital.patient_id == SYNTHETIC_PATIENT and started is not None:
             accepted[vital.timestamp_ms] = (time.perf_counter_ns() - started) / 1_000_000
@@ -276,19 +284,32 @@ def run_kafka(messages: Sequence[vitals_pb2.VitalSign], timeout_s: float) -> Tra
         remaining = deadline - time.monotonic()
         if remaining > 0:
             raw_producer = Producer(settings.producer_config())
-            raw_producer.produce(
-                settings.vitals_topic,
+            _produce_and_wait(
+                raw_producer,
+                topic=settings.vitals_topic,
                 key=SYNTHETIC_PATIENT.encode(),
-                value=POISON_PAYLOAD,
+                value=poison_payload,
+                timeout=min(10.0, remaining),
             )
-            if raw_producer.flush(min(10.0, remaining)) == 0:
-                published += 1
+            published += 1
         while observed < published and time.monotonic() < deadline:
-            result = consumer.poll_once(
-                observe,
-                timeout=min(0.25, max(0.01, deadline - time.monotonic())),
+            record = raw_consumer.poll(
+                min(0.25, max(0.01, deadline - time.monotonic()))
             )
-            if result is False:
+            if record is None:
+                continue
+            if record.error():
+                raise KafkaException(record.error())
+            matched_valid = False
+
+            def observe_current(vital) -> None:
+                nonlocal matched_valid
+                before = len(accepted)
+                observe(vital)
+                matched_valid = len(accepted) > before
+
+            result = consumer.process_record(record, observe_current)
+            if matched_valid or (result is False and record.value() == poison_payload):
                 observed += 1
     finally:
         consumer.close()

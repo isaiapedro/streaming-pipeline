@@ -15,6 +15,7 @@ from pathlib import Path
 import nats
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+COMMAND_TIMEOUT_S = 120
 
 
 async def _connect(*, user=None, password=None, cafile=None):
@@ -48,6 +49,7 @@ async def verify() -> dict[str, bool]:
             cwd=PROJECT_ROOT,
             env={**os.environ, "NATS_CERT_DIR": str(cert_dir)},
             check=True,
+            timeout=30,
         )
         user = f"test-{secrets.token_hex(8)}"
         password = secrets.token_urlsafe(24)
@@ -57,13 +59,15 @@ async def verify() -> dict[str, bool]:
             "NATS_PASSWORD": password,
             "NATS_CERT_DIR": str(cert_dir),
         }
-        compose = ["docker", "compose", "--profile", "secure"]
+        project_name = f"academic-secure-check-{secrets.token_hex(6)}"
+        compose = ["docker", "compose", "-p", project_name, "--profile", "secure"]
         try:
             subprocess.run(
                 [*compose, "up", "-d", "--wait", "nats-secure"],
                 cwd=PROJECT_ROOT,
                 env=compose_env,
                 check=True,
+                timeout=COMMAND_TIMEOUT_S,
             )
             connection = await _connect(
                 user=user,
@@ -72,19 +76,33 @@ async def verify() -> dict[str, bool]:
             )
             await connection.close()
             await _must_reject(cafile=str(cert_dir / "nats-cert.pem"))
+            connection = await _connect(
+                user=user, password=password, cafile=str(cert_dir / "nats-cert.pem")
+            )
+            await connection.close()
             await _must_reject(
                 user=user,
                 password="incorrect-password",
                 cafile=str(cert_dir / "nats-cert.pem"),
             )
+            connection = await _connect(
+                user=user, password=password, cafile=str(cert_dir / "nats-cert.pem")
+            )
+            await connection.close()
             await _must_reject(user=user, password=password)
+            connection = await _connect(
+                user=user, password=password, cafile=str(cert_dir / "nats-cert.pem")
+            )
+            await connection.close()
         finally:
             subprocess.run(
-                [*compose, "stop", "nats-secure"],
+                [*compose, "down", "--remove-orphans"],
                 cwd=PROJECT_ROOT,
                 env=compose_env,
                 check=False,
                 stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=COMMAND_TIMEOUT_S,
             )
     return {
         "authenticated": True,

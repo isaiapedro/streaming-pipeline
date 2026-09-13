@@ -18,8 +18,8 @@ committed at the workspace root under its governance contract.
 - NATS/Protobuf validation, DLQ isolation, deterministic NEWS2 A/B/C scoring,
   versioned telemetry, durable local outbox, Kafka/Schema Registry comparison,
   Grafana provisioning, and evidence tooling are implemented.
-- The complete isolated-environment suite passes with 196 tests and three optional live
-  infrastructure skips.
+- The complete isolated-environment suite passes with 207 tests and five
+  explicit live-infrastructure skips in the recorded sandboxed run.
 - Compose renders successfully and the workspace Registry validates 42
   components.
 - The development benchmark contains the required 450 approach rows, 150 run
@@ -91,6 +91,7 @@ runtime telemetry, persistence, privacy controls, and operational views.
 | First post-onset observation counted even when alarm was already active | Produced misleading near-zero detection latency | Worker 2: only a newly opened post-onset episode counts; plots show detected runs/25 |
 | `stable-baseline`/`stable_baseline` ID mismatch | First intended 24-hour run remained 600 seconds | Worker 2: corrected and rerun at 86,400 seconds; old output is superseded |
 | Benchmark was regenerated before concurrent NEWS2 API changes were reconciled | Intermediate results could mix SpO₂-scale and escalation semantics | Coordinator/Worker 2: scoring reconciled and complete development matrix rerun |
+| Kafka topic descriptions were parsed by splitting every comma | A valid `cleanup.policy=compact,delete` value was split and failed the integrated suite | Worker 1: key-aware parsing and reordered/missing/unexpected-policy regression coverage implemented; final live provisioning rerun remains due |
 | Flat normal intervals and mean-only bars | Invalid probability bounds and hidden pairing/non-detection | Worker 2: Wilson/descriptive bootstrap outputs and paired visualization implemented; crossed-design intervals remain due |
 | Run logs written only after the full matrix | A process crash can erase completed/failed-cell provenance | Worker 2: append-and-flush per-cell records plus interruption recovery tests remain P0 |
 | Manifest initially described 180 rows and did not bind the raw CSV or reject dirty release state | Stale evidence could appear releasable | Worker 2: manifest v3 validates/hashes inputs and final mode fails closed |

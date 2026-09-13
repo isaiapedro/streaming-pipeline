@@ -24,9 +24,13 @@ class KafkaTopicContract:
         if not replication_match or int(replication_match.group(1)) != self.replication_factor:
             errors.append(f"replication factor must equal {self.replication_factor}")
         for key, value in self.required_configs:
+            values = {value}
+            if "," in value:
+                values.add(",".join(reversed(value.split(","))))
+            alternatives = "|".join(re.escape(candidate) for candidate in sorted(values))
             config_pattern = (
-                rf"(?:^|[\s,]){re.escape(key)}={re.escape(value)}"
-                rf"(?=,[A-Za-z0-9_.-]+=|\s|$)"
+                rf"(?:^|[\s,:]){re.escape(key)}=(?:{alternatives})"
+                rf"(?=,\s*[A-Za-z0-9_.-]+=|\s|$)"
             )
             if not re.search(config_pattern, output):
                 errors.append(f"{key} must equal {value}")

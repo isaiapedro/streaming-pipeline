@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable, Mapping
+from enum import Enum
 from typing import Any
 
 from confluent_kafka import Consumer, KafkaException, Producer
@@ -32,6 +33,12 @@ from schema import vitals_pb2
 
 class KafkaDeliveryError(RuntimeError):
     """A Kafka record could not be confirmed before its source was committed."""
+
+
+class KafkaPollResult(Enum):
+    EMPTY = "empty"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 
 class KafkaCodec:
@@ -215,12 +222,25 @@ class KafkaVitalConsumer:
         *,
         timeout: float = 1.0,
     ) -> bool:
+        return self.poll_result(handler, timeout=timeout) is KafkaPollResult.ACCEPTED
+
+    def poll_result(
+        self,
+        handler: Callable[[ValidVital], Any],
+        *,
+        timeout: float = 1.0,
+    ) -> KafkaPollResult:
+        """Distinguish idle polls from consumed poison records."""
         record = self.consumer.poll(timeout)
         if record is None:
-            return False
+            return KafkaPollResult.EMPTY
         if record.error():
             raise KafkaException(record.error())
-        return self.process_record(record, handler)
+        return (
+            KafkaPollResult.ACCEPTED
+            if self.process_record(record, handler)
+            else KafkaPollResult.REJECTED
+        )
 
     def process_record(self, record: Any, handler: Callable[[ValidVital], Any]) -> bool:
         if record.topic() != self.settings.vitals_topic:

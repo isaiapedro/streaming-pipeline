@@ -49,7 +49,7 @@ def test_stream_setup_propagates_nats_cli_failures(tmp_path):
 
     result = subprocess.run(
         ["bash", str(PROJECT_ROOT / "scripts" / "create_streams.sh")],
-        cwd=PROJECT_ROOT,
+        cwd=tmp_path,
         env=env,
         capture_output=True,
         text=True,

@@ -135,8 +135,8 @@ class InfluxWriter:
         )
         self._task = asyncio.create_task(self._flush_loop(), name="influx-flush")
         log.info(
-            "InfluxWriter started (outbox=%s pending=%d flush=%ss batch=%d)",
-            self._outbox_path, self.pending_count, FLUSH_INTERVAL_S, FLUSH_BUFFER_SIZE,
+            "InfluxWriter started (durable outbox configured; pending=%d flush=%ss batch=%d)",
+            self.pending_count, FLUSH_INTERVAL_S, FLUSH_BUFFER_SIZE,
         )
 
     async def stop(self) -> None:

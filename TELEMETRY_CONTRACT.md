@@ -75,6 +75,7 @@ current local provisioning declares:
 | NATS `VITALS` | 24 hours | Implemented local buffer policy |
 | NATS `VITALS_DLQ` | 24 hours | Implemented, but differs from the proposed seven-day DLQ review period |
 | NATS `ALARMS` | 7 days | Implemented broker replay policy; not the proposed 180-day Influx alarm archive |
+| MQTT DLQ | No durable retention established | QoS 1 PUBACK proves local broker receipt only |
 | Kafka vital topic | Broker default | Local comparison only; owner policy not approved |
 | Kafka DLQ topic | 24 hours | Implemented, but differs from the proposed seven-day DLQ review period |
 

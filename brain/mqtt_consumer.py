@@ -88,32 +88,17 @@ async def main(host: str = "localhost", port: int = 1883) -> None:
                 topic, raw, message_id, qos = await asyncio.wait_for(queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue
-            async def reject(error: ValidationError) -> None:
-                info = client.publish(
-                    "dlq/vitals/mqtt",
-                    dead_letter(raw, error, topic, pipeline_version=PIPELINE_VERSION),
-                    qos=1,
-                )
-                if info.rc != mqtt.MQTT_ERR_SUCCESS:
-                    raise RuntimeError(f"MQTT DLQ enqueue failed with result {info.rc}")
-                await asyncio.to_thread(info.wait_for_publish, 5.0)
-                if not info.is_published():
-                    raise TimeoutError("MQTT DLQ PUBACK was not received before timeout")
-
-            await _process(
+            await _handle_delivery(
+                client,
+                topic,
                 raw,
+                message_id,
+                qos,
                 profiles,
                 ews_states,
                 batch_scheduler,
                 writer,
-                source_subject=topic.replace("/", "."),
-                reject_handler=reject,
             )
-            # With QoS 1/manual acknowledgements, broker success follows the
-            # same durable local handoff used by NATS.
-            ack_result = client.ack(message_id, qos)
-            if ack_result != mqtt.MQTT_ERR_SUCCESS:
-                raise RuntimeError(f"MQTT acknowledgement failed with result {ack_result}")
             processed += 1
 
     await _drain_queue()
@@ -123,6 +108,47 @@ async def main(host: str = "localhost", port: int = 1883) -> None:
     client.disconnect()
     await writer.stop()
     log.info("Done.")
+
+
+async def _handle_delivery(
+    client,
+    topic: str,
+    raw: bytes,
+    message_id: int,
+    qos: int,
+    profiles: dict[str, dict],
+    ews_states: dict[str, PatientEWSState],
+    batch_scheduler: BatchScheduler,
+    writer: InfluxWriter,
+) -> None:
+    """Complete the durable/DLQ handoff before acknowledging one QoS delivery."""
+
+    async def reject(error: ValidationError) -> None:
+        info = client.publish(
+            "dlq/vitals/mqtt",
+            dead_letter(raw, error, topic, pipeline_version=PIPELINE_VERSION),
+            qos=1,
+        )
+        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+            raise RuntimeError(f"MQTT DLQ enqueue failed with result {info.rc}")
+        # The Paho network loop runs on its own thread. A bounded direct wait
+        # avoids leaking a per-event-loop executor during service/test teardown.
+        info.wait_for_publish(timeout=5.0)
+        if not info.is_published():
+            raise TimeoutError("MQTT DLQ PUBACK was not received before timeout")
+
+    await _process(
+        raw,
+        profiles,
+        ews_states,
+        batch_scheduler,
+        writer,
+        source_subject=topic.replace("/", "."),
+        reject_handler=reject,
+    )
+    ack_result = client.ack(message_id, qos)
+    if ack_result != mqtt.MQTT_ERR_SUCCESS:
+        raise RuntimeError(f"MQTT acknowledgement failed with result {ack_result}")
 
 
 async def _process(

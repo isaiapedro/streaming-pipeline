@@ -4,6 +4,8 @@
 
 set -euo pipefail
 
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
 NATS_URL="${NATS_URL:-nats://localhost:4222}"
 NATS_ARGS=(--server "$NATS_URL")
 if [[ -n "${NATS_USER:-}" ]]; then NATS_ARGS+=(--user "$NATS_USER"); fi
@@ -14,8 +16,8 @@ fi
 
 if [[ -n "${PYTHON_BIN:-}" ]]; then
   PYTHON_CMD="$PYTHON_BIN"
-elif [[ -x "./tcc_env/bin/python" ]]; then
-  PYTHON_CMD="./tcc_env/bin/python"
+elif [[ -x "$PROJECT_DIR/tcc_env/bin/python" ]]; then
+  PYTHON_CMD="$PROJECT_DIR/tcc_env/bin/python"
 else
   PYTHON_CMD="python3"
 fi
@@ -35,7 +37,7 @@ create_or_verify_consumer() {
       --force \
       --no-interactive
     nats "${NATS_ARGS[@]}" consumer info VITALS "$consumer" --json \
-      | "$PYTHON_CMD" scripts/check_nats_consumer_config.py "$consumer"
+      | "$PYTHON_CMD" "$PROJECT_DIR/scripts/check_nats_consumer_config.py" "$consumer"
     echo "Consumer ${consumer} exists and matches the local contract."
   else
     nats "${NATS_ARGS[@]}" consumer add VITALS "$consumer" \
@@ -48,7 +50,7 @@ create_or_verify_consumer() {
       --max-pending 500 \
       --defaults
     nats "${NATS_ARGS[@]}" consumer info VITALS "$consumer" --json \
-      | "$PYTHON_CMD" scripts/check_nats_consumer_config.py "$consumer"
+      | "$PYTHON_CMD" "$PROJECT_DIR/scripts/check_nats_consumer_config.py" "$consumer"
   fi
 }
 
@@ -75,7 +77,7 @@ create_or_verify_stream() {
       --defaults
   fi
   nats "${NATS_ARGS[@]}" stream info "$stream" --json \
-    | "$PYTHON_CMD" scripts/check_nats_stream_config.py "$stream"
+    | "$PYTHON_CMD" "$PROJECT_DIR/scripts/check_nats_stream_config.py" "$stream"
   echo "Stream ${stream} matches the local contract."
 }
 

@@ -1,5 +1,19 @@
 # Architectural Decisions
 
+## 2026-09-13 — Documentation uses durable authorities, not milestone reports
+
+The maintained documentation set is limited to the workspace behavior
+contract, README, accepted decisions, consolidated implementation/decision
+status, active implementation blueprint, operator guide, telemetry contract,
+and the governed evidence documentation.
+
+Milestone, worker, and point-in-time release reports are removed after their
+unique findings are incorporated into those authorities. Obsolete notebooks,
+diagrams, placeholders, and duplicated generated outputs are not retained as
+parallel sources of truth. Implementation source, tests, schemas, runtime
+configuration, manifests, and evidence artifacts remain even after a feature
+is implemented because they are required to reproduce and verify the claims.
+
 ## 2026-09-13 — Broker acknowledgement follows local durable handoff
 
 For the NATS and MQTT runtime paths, the acknowledgement boundary is the
@@ -63,11 +77,16 @@ input namespace.
 Kafka Schema Registry compatibility enforcement is isolated from the NATS
 prototype and governed by the Milestone 4 decision below.
 
-## 2026-09-13 — Kafka is an isolated research comparison, not the MVP transport
+## 2026-09-13 — Kafka is an isolated validation-only comparison, not the MVP transport
 
 Milestone 4 implements a local, opt-in Kafka and Confluent Schema Registry path
 for transport comparison. It does not replace or wrap the NATS MVP, and it does
 not claim production or 500-patient deployment readiness.
+
+The shipped Kafka consumer's handler prints a validated record. It does not
+run Brain scoring, commit to the SQLite outbox, write InfluxDB, or emit alarms.
+Its parity harness therefore measures wire/schema acceptance, rejection, and
+local delivery latency only; it is not application, storage, or outcome parity.
 
 The comparison uses `vitals.protobuf.v1` and `vitals.dlq.protobuf.v1`. Values
 use the canonical Protobuf messages with Schema Registry framing; patient ID is
@@ -87,3 +106,19 @@ loopback ports `19092` (Kafka) and `18081` (Schema Registry). Encryption,
 authentication, multi-broker durability, transactions, hosted operation, and
 the 500-patient scale claim remain outside this comparison and require a later
 deployment decision.
+
+## 2026-09-13 — MQTT and local alarms have explicit, limited broker boundaries
+
+MQTT mirrors canonical payloads on `vitals/{patient_id}/{signal_type}` and the
+consumer subscribes only to `vitals/#`. The slash topic is mapped to the shared
+dotted identity validator. Valid QoS 1 input is manually acknowledged after the
+atomic SQLite outbox handoff. Invalid input is acknowledged only after a QoS 1
+publish to `dlq/vitals/mqtt` receives PUBACK. PUBACK proves broker receipt, not
+durable archive or later consumption. NATS and MQTT dual-publish operations are
+independent and are not atomic.
+
+The local scorer publishes priority events to the file-backed `ALARMS` stream
+on `alarms.>` with a seven-day maximum age. A JetStream publish acknowledgement
+precedes acknowledgement of the triggering vital. Its NEWS2 window is
+memory-only, no notification consumer is implemented, and no external alert
+delivery or restart-continuity claim is made.

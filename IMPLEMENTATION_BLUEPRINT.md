@@ -73,26 +73,32 @@ Work only in benchmark, aggregation, distribution, scale/latency, and
 Work only in runtime persistence, telemetry, Grafana, alerting, and associated
 tests unless a shared semantic change is coordinated.
 
-1. Derive outbox idempotency from stable source-message identity and test
-   redelivery, process crash, writer restart, and duplicate suppression.
-2. Implement and verify terminal-failure quarantine/advisory handling plus
-   privacy-safe operational outbox health reporting.
-3. Reconcile accepted broker inputs, outbox state, and successful Influx writes
-   before making any remote-storage completeness claim.
+1. Replace exact-derived-record hashes with stable source-message identity
+   propagated from NATS/MQTT. Test redelivery and process crash across threshold
+   or configuration changes; writer restart for identical records already has
+   offline coverage.
+2. Define maximum-attempt/failure classification and implement privacy-safe
+   terminal quarantine plus an advisory/operational signal and tests. The
+   aggregate read-only outbox-health tool is already complete.
+3. Produce one reconciliation result joining accepted broker input counts,
+   outbox pending/delivered state, and stored Influx counts; execute it against
+   final telemetry before making any remote-storage completeness claim.
 4. Obtain owner approval for Influx, broker, DLQ, alarm, and log retention;
    configure and test only the approved policies and deletion controls.
 5. Record owner confirmation that the historically exposed Influx token was
    rotated; never record either credential value.
-6. Correct Grafana comparison queries so Approach A from `patient_vitals` and
-   B/C from `alarms` are compared honestly, and add genuine onset-to-detection
-   timing rather than relabelling an alarm timeline.
-7. Parameterize the Influx bucket in dashboard and alert provisioning, then run
-   live datasource/query validation against final telemetry.
+6. Add a genuine Grafana onset-to-detection view based on an explicit onset
+   source or annotation. The existing static evidence timeline does not satisfy
+   this live-dashboard gate.
+7. Replace the hardcoded `vitals` bucket in dashboard and alert queries with
+   governed configuration, strengthen tests for both, and run live
+   datasource/query/render validation against final telemetry.
 8. Exercise the paused synthetic alert end to end only after an approved
    destination is configured; retain sanitized evidence and document that the
    local `ALARMS` stream alone is not external notification delivery.
-9. Update architecture, behavior, telemetry, Grafana, Agent 3/M6, and M7
-   reports so persistence and alert claims match the verified implementation.
+9. After live gates, update only the maintained authorities and evidence
+   artifacts with actual outcomes; the repository has intentionally
+   consolidated and removed milestone reports.
 
 ### Coordinator — Integration and release
 

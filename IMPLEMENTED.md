@@ -19,7 +19,7 @@ hospital-scale readiness, or suitability for real patient data.
 | --- | --- | --- |
 | Worker 1 — Transport and schema | Protobuf, NATS, MQTT/Kafka transport behavior, Schema Registry, broker provisioning, acknowledgement and offset tests | Offline transport contracts and regressions are implemented. Final live broker, restart, fault, persistence, and parity evidence remains due. |
 | Worker 2 — Experimental evidence | Benchmark design, estimands, aggregation, statistical evidence, scale/latency results, manifests and release artifacts | The corrected development matrix and evidence integrity controls are implemented. Crash-safe provenance, dependence-aware inference, reference validation, sensitivity analysis, scale T2–T4, and clean final reproduction remain due. |
-| Worker 3 — Telemetry, compliance and visualization | Runtime telemetry, durable outbox, Influx boundary, privacy-safe diagnostics, Grafana and dissertation-facing status views | All locally executable tasks from this review are implemented and unit-tested. Live Influx, rendered Grafana, alert-delivery, credential, and retention gates remain unexecuted or decision-gated. |
+| Worker 3 — Telemetry, compliance and visualization | Runtime telemetry, durable outbox, Influx boundary, privacy-safe diagnostics, Grafana and dissertation-facing status views | Privacy-safe diagnostics, outbox tooling, and offline dashboard semantics are implemented. Source-message idempotency and terminal quarantine remain local implementation work; live Influx, Grafana, alert, credential, and retention gates remain unexecuted or decision-gated. |
 | Coordinator | Shared scoring semantics, architecture decisions, Registry integration, final release and claim approval | Completed work and decisions are maintained here; remaining work and fail-closed gates are maintained in `IMPLEMENTATION_BLUEPRINT.md`. |
 
 ## Implemented system capabilities
@@ -108,7 +108,8 @@ hospital-scale readiness, or suitability for real patient data.
   WAL outbox before NATS or MQTT acknowledgement.
 - A full outbox or local persistence failure leaves the broker message
   unacknowledged and restores tentative scoring state for redelivery.
-- Content-derived event keys make local redelivery idempotent.
+- Content-derived event keys suppress exact derived-record duplicates. They do
+  not yet guarantee source-message idempotency across threshold/config changes.
 - Influx delivery is asynchronous and retried with bounded exponential backoff.
 - Acknowledgement therefore means local durable handoff, not confirmed remote
   Influx storage.
@@ -226,8 +227,9 @@ must be repeated only when a later source commit changes their path:
 - Kafka topic and schema provisioning was idempotent, enforced
   `BACKWARD_TRANSITIVE`, accepted the compatible candidate, and rejected the
   breaking candidate;
-- one live parity run accepted 20/20 identical synthetic messages through each
-  NATS and Kafka path;
+- the current live parity run accepted 10/10 identical valid synthetic
+  messages and rejected one intentional poison record through each NATS and
+  Kafka path;
 - required MQTT integration passed its QoS 1 and
   confirmed-DLQ-before-source-ack path;
 - a fresh isolated environment resolved every direct pin and passed `pip
@@ -400,7 +402,7 @@ inferred from the completed offline suite:
 - crash-safe append-and-flush provenance with interruption recovery;
 - frozen ADEMP/STRESS protocol and dependence-aware paired inference;
 - approved-reference validation and temporal comparison;
-- final live NATS/Kafka provisioning, parity, restart, redelivery, persistence,
+- clean-final-commit live reruns plus restart, redelivery, persistence,
   packet-loss, replay, DLQ-deduplication, and memory evidence;
 - publish-to-confirmed-storage and alarm-delivery latency;
 - scale tiers T2–T4 on approved hardware;

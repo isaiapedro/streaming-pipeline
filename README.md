@@ -268,7 +268,9 @@ SIGNAL_THRESHOLDS = {
 
 - **State timeline panel**: one per patient, shows `alarm_level` tag over time — visually compelling for demo
 - **Threshold lines**: drawn on each signal panel as static visual reference
-- **Alert rules**: Flux query counts `alarm_level = "critical"` in last 30s → fires webhook or email
+- **Alert rules**: the synthetic critical rule is paused and has no committed
+  destination. Webhook/email delivery is not established until an approved
+  synthetic-only destination is exercised and verified.
 
 ---
 

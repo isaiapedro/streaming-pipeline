@@ -56,7 +56,10 @@ def attestation_chain(implementation_commit: str | None, attestation_commit: str
     except subprocess.CalledProcessError:
         return ["run-log implementation commit is not an ancestor of the attestation commit"]
     changed = git_value("diff", "--name-only", f"{implementation_commit}..{attestation_commit}").splitlines()
-    unexpected = sorted(path for path in changed if not path.startswith("evidence/"))
+    unexpected = sorted(
+        path for path in changed
+        if not path.startswith("evidence/") and path != "benchmark_results.csv"
+    )
     if unexpected:
         return [
             "implementation-to-attestation history changes non-evidence paths: "
@@ -126,6 +129,7 @@ def _artifact(path: Path, record_count: int | None = None, role: str = "supporti
         "exists": path.is_file(),
         "sha256": file_sha256(path) if path.is_file() else None,
         "record_count": record_count,
+        "tracked": _is_tracked(path),
     }
 
 
@@ -301,6 +305,9 @@ def build_manifest(
     publishable_artifacts = evidence_inventory(ROOT / "evidence")
     blockers = list(artifact_context["validation_errors"])
     untracked_artifacts = [item["path"] for item in publishable_artifacts if not item["tracked"]]
+    raw_artifact = artifact_context["raw_benchmark"]
+    if raw_artifact["exists"] and not raw_artifact["tracked"]:
+        untracked_artifacts.append(raw_artifact["path"])
     if untracked_artifacts:
         blockers.append("untracked publishable evidence artifacts: " + ", ".join(untracked_artifacts))
     blockers.extend(attestation_chain(implementation_commit, commit))

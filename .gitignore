@@ -1,7 +1,6 @@
 __pycache__/
 *.pyc
 tcc_env/
-benchmark_results.csv
 protocol_benchmark.csv
 !evidence/protocol_benchmark.csv
 distribution_validation/

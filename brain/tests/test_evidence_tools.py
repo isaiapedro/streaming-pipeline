@@ -162,7 +162,7 @@ def test_final_release_fails_closed_with_actionable_blockers():
 def test_attestation_chain_allows_only_evidence_changes(monkeypatch):
     def clean_chain(*args):
         if args[:3] == ("diff", "--name-only", "implementation..attestation"):
-            return "evidence/manifest.json\nevidence/SHA256SUMS"
+            return "benchmark_results.csv\nevidence/manifest.json\nevidence/SHA256SUMS"
         return ""
 
     monkeypatch.setattr("scripts.build_evidence_manifest.git_value", clean_chain)

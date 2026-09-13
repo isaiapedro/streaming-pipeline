@@ -418,14 +418,15 @@ PIPELINE_VERSION=CLEAN_COMMIT_OR_TAG .venv/bin/python scripts/run_benchmark.py \
 
 Development mode records dirty-state, dependency, matrix, duration, run-log,
 and input-hash blockers for inspection. Final mode refuses to overwrite the
-manifest while any blocker remains. The manifest records the external raw
+manifest while any blocker remains. The manifest records the versioned raw
 benchmark's hash even though `SHA256SUMS` is scoped to `evidence/`.
 
 Review and commit the generated `evidence/` directory as an evidence-only
 commit. From that clean commit, run `build_evidence_manifest.py --mode final`.
 The gate proves that the run-log implementation commit is its ancestor and
-rejects any intervening change outside `evidence/`; the manifest records both
-the measured implementation and attestation-base commits. Commit the final
+rejects any intervening change outside `evidence/` and the exact governed root
+artifact `benchmark_results.csv`; the manifest records both the measured
+implementation and attestation-base commits. Commit the final
 manifest and checksums as a second evidence-only attestation commit.
 
 The notebook may explore or display results, but it is not an authoritative

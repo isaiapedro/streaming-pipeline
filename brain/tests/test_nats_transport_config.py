@@ -2,6 +2,7 @@ import os
 import json
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -159,7 +160,7 @@ def test_consumer_config_checker_accepts_contract_and_rejects_drift():
             "max_ack_pending": 500,
         }
     }
-    command = [str(PROJECT_ROOT / "tcc_env" / "bin" / "python"), str(checker), "BRAIN"]
+    command = [sys.executable, str(checker), "BRAIN"]
     accepted = subprocess.run(
         command, cwd=PROJECT_ROOT, input=json.dumps(valid), text=True, capture_output=True
     )

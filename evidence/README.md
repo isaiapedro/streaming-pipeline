@@ -48,9 +48,9 @@ does not count as detection. `RESULTS.md` and `FIGURE_CAPTIONS.md` define the
 claim boundary and interpretation.
 
 `SHA256SUMS` covers the publishable artifacts in this directory. The manifest's
-`benchmark.artifacts` section additionally hashes `benchmark_results.csv`,
-which intentionally remains at the repository root and is ignored by Git, and
-hashes the run log again as a direct provenance input. Re-run development mode
+`benchmark.artifacts` section additionally hashes and tracks
+`benchmark_results.csv` at the repository root, and hashes the run log again
+as a direct provenance input. Re-run development mode
 after iterative changes; use final mode only from the frozen release commit
 and its exact environment.
 Final mode also requires every inventoried publishable artifact to be tracked

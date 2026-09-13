@@ -1,0 +1,22 @@
+{
+  "achieved_rate_msg_s": 29.98245116339667,
+  "backlog_messages": 0,
+  "duration_s": 10.00585303600019,
+  "machine": {
+    "architecture": "x86_64",
+    "logical_cpus": 12,
+    "memory_bytes": 33332183040,
+    "os": "Linux",
+    "os_release": "6.12.107+deb13-amd64",
+    "python_version": "3.13.5"
+  },
+  "measured_at_utc": "2026-09-13T21:47:32.462237+00:00",
+  "p50_latency_ms": 11.25788688659668,
+  "p99_latency_ms": 14.944314956665039,
+  "patients": 6,
+  "pull_timeout_s": 0.1,
+  "signal_rate_hz": 1.0,
+  "status": "executed",
+  "target_rate_msg_s": 30.0,
+  "tier": "T1"
+}

@@ -3,4 +3,7 @@ __pycache__/
 tcc_env/
 benchmark_results.csv
 protocol_benchmark.csv
+distribution_validation/
 .env
+nats/certs/
+.runtime/

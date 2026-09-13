@@ -46,6 +46,9 @@ import paho.mqtt.client as mqtt
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from config.settings import PIPELINE_VERSION, SCHEMA_VERSION
+from schema import vitals_pb2
+
 NATS_URL = "nats://localhost:4222"
 MQTT_HOST, MQTT_PORT = "localhost", 1883
 NATS_CONTAINER = "academic-nats-1"
@@ -71,17 +74,17 @@ async def _nats_latency_run(n: int, rate_hz: float) -> list[float]:
                 msgs = await sub.fetch(min(50, n - len(latencies)), timeout=2.0)
             except Exception:
                 continue
-            now = time.perf_counter()
+            now_ms = time.time_ns() / 1_000_000
             for msg in msgs:
-                sent = float(msg.data.decode())
-                latencies.append((now - sent) * 1000)
+                sent = vitals_pb2.VitalSign.FromString(msg.data)
+                latencies.append(now_ms - sent.timestamp_ms)
                 await msg.ack()
         done.set()
 
     consume_task = asyncio.create_task(_consume())
 
     for _ in range(n):
-        await js.publish("bench.latency", str(time.perf_counter()).encode())
+        await js.publish("bench.latency", _benchmark_payload())
         if rate_hz > 0:
             await asyncio.sleep(1 / rate_hz)
 
@@ -96,8 +99,8 @@ def _mqtt_latency_run(n: int, rate_hz: float) -> list[float]:
     latencies: list[float] = []
 
     def on_message(client, userdata, msg):
-        sent = float(msg.payload.decode())
-        latencies.append((time.perf_counter() - sent) * 1000)
+        sent = vitals_pb2.VitalSign.FromString(msg.payload)
+        latencies.append(time.time_ns() / 1_000_000 - sent.timestamp_ms)
 
     sub = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     sub.on_message = on_message
@@ -110,7 +113,7 @@ def _mqtt_latency_run(n: int, rate_hz: float) -> list[float]:
     pub.connect(MQTT_HOST, MQTT_PORT)
     pub.loop_start()
     for _ in range(n):
-        pub.publish("bench/latency", str(time.perf_counter()).encode(), qos=1)
+        pub.publish("bench/latency", _benchmark_payload(), qos=1)
         if rate_hz > 0:
             time.sleep(1 / rate_hz)
 
@@ -308,10 +311,7 @@ def _mqtt_publish_overhead(topic: str, payload_len: int, qos: int = 1) -> int:
 
 
 def _wire_overhead_table() -> list[dict]:
-    sample_payload = json.dumps({
-        "patient_id": "P-001", "signal_type": "heart_rate", "value": 88.4, "timestamp": 1750000000000,
-    })
-    payload_len = len(sample_payload.encode())
+    payload_len = len(_benchmark_payload(timestamp_ms=1_750_000_000_000))
     subject = "vitals.P-001.heart_rate"
     return [{
         "payload_bytes": payload_len,
@@ -319,6 +319,20 @@ def _wire_overhead_table() -> list[dict]:
         "mqtt_qos1_overhead_bytes": _mqtt_publish_overhead(subject, payload_len, qos=1),
         "mqtt_qos0_overhead_bytes": _mqtt_publish_overhead(subject, payload_len, qos=0),
     }]
+
+
+def _benchmark_payload(timestamp_ms: int | None = None) -> bytes:
+    """Canonical final Protobuf encoding used by live protocol measurements."""
+    message = vitals_pb2.VitalSign(
+        patient_id="P-BENCH",
+        signal_type="heart_rate",
+        scalar_value=88.4,
+        timestamp_ms=timestamp_ms if timestamp_ms is not None else time.time_ns() // 1_000_000,
+        schema_version=SCHEMA_VERSION,
+        pipeline_version=PIPELINE_VERSION,
+        scenario_id="protocol_benchmark",
+    )
+    return message.SerializeToString()
 
 
 # --------------------------------------------------------- drop-and-redeliver ---
@@ -415,44 +429,47 @@ async def run(n: int, out_path: Path, skip_restarts: bool) -> None:
     mqtt_lat = _mqtt_latency_run(n, rate_hz=200)
     n_p50, n_p99 = _p50_p99(nats_lat)
     m_p50, m_p99 = _p50_p99(mqtt_lat)
-    rows.append({"dimension": "latency_p50_ms", "nats": n_p50, "mqtt": m_p50})
-    rows.append({"dimension": "latency_p99_ms", "nats": n_p99, "mqtt": m_p99})
+    rows.append({"dimension": "latency_p50_ms", "nats": n_p50, "mqtt": m_p50, "method": "measured", "notes": "live broker, canonical Protobuf"})
+    rows.append({"dimension": "latency_p99_ms", "nats": n_p99, "mqtt": m_p99, "method": "measured", "notes": "live broker, canonical Protobuf"})
     print(f"  NATS  P50={n_p50:.2f}ms P99={n_p99:.2f}ms")
     print(f"  MQTT  P50={m_p50:.2f}ms P99={m_p99:.2f}ms")
 
     print("Wire overhead (analytical, no tcpdump in this environment)...")
     wire = _wire_overhead_table()[0]
     for k, v in wire.items():
-        rows.append({"dimension": f"wire_{k}", "nats": v if "nats" in k else "", "mqtt": v if "mqtt" in k else ""})
+        common_payload = k == "payload_bytes"
+        rows.append({"dimension": f"wire_{k}", "nats": v if common_payload or "nats" in k else "", "mqtt": v if common_payload or "mqtt" in k else "", "method": "analytically_calculated", "notes": "protocol framing around canonical Protobuf payload"})
     print(f"  {wire}")
 
     print("Delivery under a dropped publisher connection (proxy for packet loss)...")
     n_recv, n_sent = await _nats_delivery_under_drop(n)
-    rows.append({"dimension": "delivery_under_drop", "nats": f"{n_recv}/{n_sent}", "mqtt": ""})
+    rows.append({"dimension": "delivery_under_drop", "nats": f"{n_recv}/{n_sent}", "mqtt": "", "method": "measured", "notes": "forced publisher disconnect; not packet-level loss"})
     m_recv, m_sent = _mqtt_delivery_under_drop(n)
     rows[-1]["mqtt"] = f"{m_recv}/{m_sent}"
     print(f"  NATS {n_recv}/{n_sent} delivered   MQTT {m_recv}/{m_sent} delivered")
 
     if not skip_restarts:
         print("Memory footprint before restart tests...")
-        rows.append({"dimension": "memory_usage", "nats": _docker_memory(NATS_CONTAINER), "mqtt": _docker_memory(MQTT_CONTAINER)})
+        rows.append({"dimension": "memory_usage", "nats": _docker_memory(NATS_CONTAINER), "mqtt": _docker_memory(MQTT_CONTAINER), "method": "measured", "notes": "docker stats --no-stream"})
 
         print("Reconnect recovery time (restarting both broker containers)...")
         nats_recovery = await _nats_reconnect_recovery()
         mqtt_recovery = _mqtt_reconnect_recovery()
-        rows.append({"dimension": "reconnect_recovery_s", "nats": round(nats_recovery, 2), "mqtt": round(mqtt_recovery, 2)})
+        rows.append({"dimension": "reconnect_recovery_s", "nats": round(nats_recovery, 2), "mqtt": round(mqtt_recovery, 2), "method": "measured", "notes": "broker container restart to successful publish"})
         print(f"  NATS {nats_recovery:.2f}s   MQTT {mqtt_recovery:.2f}s")
 
         print("Persistence durability across a broker restart...")
         n_survived, n_total = await _nats_persistence_durability(min(n, 200))
         m_survived, m_total = _mqtt_persistence_durability(min(n, 200))
-        rows.append({"dimension": "persistence_survived", "nats": f"{n_survived}/{n_total}", "mqtt": f"{m_survived}/{m_total}"})
+        rows.append({"dimension": "persistence_survived", "nats": f"{n_survived}/{n_total}", "mqtt": f"{m_survived}/{m_total}", "method": "measured", "notes": "survival across broker container restart"})
         print(f"  NATS {n_survived}/{n_total} survived   MQTT {m_survived}/{m_total} survived")
     else:
         print("Skipping restart-dependent tests (--skip-restarts): reconnect recovery, persistence, memory.")
+        for dimension in ("memory_usage", "reconnect_recovery_s", "persistence_survived"):
+            rows.append({"dimension": dimension, "nats": "", "mqtt": "", "method": "unavailable", "notes": "not executed: --skip-restarts"})
 
     with open(out_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["dimension", "nats", "mqtt"])
+        writer = csv.DictWriter(f, fieldnames=["dimension", "nats", "mqtt", "method", "notes"])
         writer.writeheader()
         writer.writerows(rows)
     print(f"Wrote {len(rows)} rows to {out_path}")

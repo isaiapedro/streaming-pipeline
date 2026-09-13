@@ -4,13 +4,13 @@ blood_pressure payloads contain both systolic and diastolic values, so
 `evaluate_message` expands them into two independent readings.
 """
 
-from config.thresholds import SIGNAL_THRESHOLDS
+from config.thresholds import ThresholdSnapshot, get_threshold_snapshot
 
 _LEVEL_RANK = {"ok": 0, "warning": 1, "critical": 2}
 
 
-def _eval_single(signal: str, value: float) -> str:
-    thresholds = SIGNAL_THRESHOLDS.get(signal)
+def _eval_single(signal: str, value: float, snapshot: ThresholdSnapshot) -> str:
+    thresholds = snapshot.values.get(signal)
     if not thresholds:
         return "ok"
 
@@ -25,16 +25,19 @@ def _eval_single(signal: str, value: float) -> str:
     return "ok"
 
 
-def evaluate_message(signal_type: str, value) -> list[tuple[str, float, str]]:
+def evaluate_message(
+    signal_type: str, value, snapshot: ThresholdSnapshot | None = None,
+) -> list[tuple[str, float, str]]:
     """Return a list of (signal_type, float_value, alarm_level) tuples.
 
     blood_pressure expands into two entries (systolic_bp, diastolic_bp).
     """
+    snapshot = snapshot or get_threshold_snapshot()
     if signal_type == "blood_pressure":
         sys_v = float(value["systolic"])
         dia_v = float(value["diastolic"])
         return [
-            ("systolic_bp",  sys_v, _eval_single("systolic_bp",  sys_v)),
-            ("diastolic_bp", dia_v, _eval_single("diastolic_bp", dia_v)),
+            ("systolic_bp",  sys_v, _eval_single("systolic_bp",  sys_v, snapshot)),
+            ("diastolic_bp", dia_v, _eval_single("diastolic_bp", dia_v, snapshot)),
         ]
-    return [(signal_type, float(value), _eval_single(signal_type, float(value)))]
+    return [(signal_type, float(value), _eval_single(signal_type, float(value), snapshot))]

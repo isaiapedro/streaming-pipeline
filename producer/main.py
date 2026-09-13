@@ -17,7 +17,7 @@ from pathlib import Path
 
 import nats
 
-from config.settings import NATS_URL
+from config.settings import NATS_URL, nats_connection_options
 from data.generators.noise import NoiseConfig, NoiseInjector
 from data.scenarios.definitions import SCENARIOS
 from producer.mqtt_producer import MqttPublisher
@@ -38,8 +38,7 @@ def _load_profiles() -> list[dict]:
         log.error("No patient profiles found in %s", PROFILES_DIR)
         sys.exit(1)
     profiles = [json.loads(p.read_text()) for p in paths]
-    log.info("Loaded %d patient profiles: %s", len(profiles),
-              [p["patient_id"] for p in profiles])
+    log.info("Loaded %d synthetic patient profiles", len(profiles))
     return profiles
 
 
@@ -79,13 +78,13 @@ async def main() -> None:
     if scenario:
         log.info("Scenario active: %s (%s)", scenario.scenario_id, scenario.description)
 
-    log.info("Connecting to NATS at %s", NATS_URL)
-    nc = await nats.connect(NATS_URL)
+    log.info("Connecting to configured NATS endpoint")
+    nc = await nats.connect(**nats_connection_options())
     js = nc.jetstream()
 
     mqtt_publisher = None
     if args.dual_mqtt:
-        log.info("Dual-publishing to MQTT at %s:%d", args.mqtt_host, args.mqtt_port)
+        log.info("Dual-publishing to configured MQTT endpoint")
         mqtt_publisher = MqttPublisher(args.mqtt_host, args.mqtt_port)
 
     loop = asyncio.get_running_loop()

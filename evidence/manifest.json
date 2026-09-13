@@ -1,0 +1,442 @@
+{
+  "benchmark": {
+    "alarm_episode_definition": "opens on first alarming observation; closes after 10 seconds continuously clear",
+    "approaches": [
+      "A",
+      "B",
+      "C"
+    ],
+    "artifacts": {
+      "expected_raw_rows": 450,
+      "expected_run_records": 150,
+      "raw_benchmark": {
+        "exists": true,
+        "path": "benchmark_results.csv",
+        "record_count": 450,
+        "sha256": "7eff00fe04d286012227c290f46ca9144260f8fc46bdc64ba09987004a5bccfd"
+      },
+      "run_log": {
+        "exists": true,
+        "path": "evidence/experiment_runs.jsonl",
+        "record_count": 150,
+        "sha256": "ab0a4d1a21eee6a20593a44ba88492ed90d46a6724506c5a1563a1a830bdf4cb"
+      },
+      "validation_errors": [
+        "run log was generated from a dirty or unknown worktree"
+      ],
+      "validation_status": "development_only"
+    },
+    "confidence_interval": "Wilson 95% interval for run probabilities; deterministic 2,000-resample bootstrap 95% interval for metric means",
+    "design": "fully crossed 5 x 5 signal/noise seeds; identical cells for A/B/C",
+    "detection_definition": "first newly opened alarm episode at or after ground-truth onset",
+    "expected_source_rows": 450,
+    "noise_seeds": [
+      2000,
+      4000,
+      6000,
+      8000,
+      10000
+    ],
+    "scenario_set": [
+      {
+        "duration_s": 600,
+        "expect_alarm": true,
+        "onset_offset_ms": 60000,
+        "scenario_id": "sepsis_progression"
+      },
+      {
+        "duration_s": 300,
+        "expect_alarm": true,
+        "onset_offset_ms": 90000,
+        "scenario_id": "cardiac_deterioration"
+      },
+      {
+        "duration_s": 600,
+        "expect_alarm": true,
+        "onset_offset_ms": 60000,
+        "scenario_id": "copd_exacerbation"
+      },
+      {
+        "duration_s": 300,
+        "expect_alarm": false,
+        "onset_offset_ms": 120000,
+        "scenario_id": "false_positive_storm"
+      },
+      {
+        "duration_s": 300,
+        "expect_alarm": true,
+        "onset_offset_ms": 90000,
+        "scenario_id": "hypertensive_crisis"
+      },
+      {
+        "duration_s": 86400,
+        "expect_alarm": false,
+        "onset_offset_ms": 0,
+        "scenario_id": "stable_baseline"
+      }
+    ],
+    "signal_seeds": [
+      1000,
+      2000,
+      3000,
+      4000,
+      5000
+    ]
+  },
+  "code": {
+    "commit": "f08def23286d92918a085f2a7d9742a6b3bf1176",
+    "note": "Final measurements must be rerun after the worktree is clean when worktree_dirty is true.",
+    "worktree_dirty": true
+  },
+  "commands": {
+    "benchmark_aggregate": "python scripts/aggregate_benchmark.py --input benchmark_results.csv --output evidence/benchmark_aggregate.csv --figures-dir evidence/figures",
+    "benchmark_raw": "python3 scripts/run_benchmark.py --signal-seeds 5 --noise-seeds 5 --stable-duration-s 86400 --out benchmark_results.csv --run-log evidence/experiment_runs.jsonl",
+    "checksums": "python3 scripts/build_evidence_manifest.py --checksum-only",
+    "development_manifest": "python3 scripts/build_evidence_manifest.py --mode development",
+    "distribution": "python scripts/validate_distributions.py --reference /approved/external/reference.csv --synthetic /approved/external/synthetic.csv --source-id SOURCE_ID --transformation-method METHOD --out-dir evidence/distribution",
+    "evidence_status_figure": "MPLCONFIGDIR=/tmp/matplotlib-academic python3 scripts/generate_evidence_status.py",
+    "final_manifest": "python3 scripts/build_evidence_manifest.py --mode final",
+    "live_latency": "python scripts/measure_live_latency.py --count 100 --skip-storage --csv-out evidence/live_latency.csv --json-out evidence/live_latency.json",
+    "protocol": "python scripts/benchmark_protocol.py --n 100 --out evidence/protocol_benchmark.csv --skip-restarts",
+    "scale_tier": "python scripts/run_scale_tier.py --tier T1 --duration 10 --pull-timeout 0.1 --nats-url nats://localhost:4222 --csv-out evidence/scale_results.csv --json-out evidence/scale_T1.json",
+    "tests": "python3 -m pytest -q"
+  },
+  "distribution_reference": {
+    "approved_source_id": null,
+    "direction": "synthetic_to_reference",
+    "metric": "KL(P_synthetic || P_reference) over 30 shared histogram bins with additive smoothing epsilon=1e-12",
+    "source_rows_committed": false,
+    "status": "unexecuted",
+    "transformation_method": null
+  },
+  "generated_at_utc": "2026-09-13T22:30:09.883932+00:00",
+  "live_experiments": {
+    "benchmark_run_provenance": {
+      "artifact": "evidence/experiment_runs.jsonl",
+      "contains_raw_vitals": false,
+      "records_expected": 150,
+      "status": "executed"
+    },
+    "pipeline_latency": {
+      "artifact": "evidence/live_latency.json",
+      "status": "executed_partial",
+      "storage_latency": "unexecuted (--skip-storage)"
+    },
+    "protocol": {
+      "artifact": "evidence/protocol_benchmark.csv",
+      "restart_dependent_dimensions": "unavailable (--skip-restarts)",
+      "status": "executed_partial"
+    }
+  },
+  "manifest_version": 3,
+  "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
+  "release": {
+    "blockers": [
+      "run log was generated from a dirty or unknown worktree",
+      "worktree is dirty",
+      "installed environment does not exactly match every pinned requirement"
+    ],
+    "eligible_for_final_release": false,
+    "policy": "Development mode records blockers; final mode exits without overwriting the manifest when any blocker exists.",
+    "requested_mode": "development"
+  },
+  "runtime": {
+    "dependencies": [
+      {
+        "expected_version": "1.4.0",
+        "installed_version": "1.4.0",
+        "package": "aiocsv",
+        "requirement": "aiocsv==1.4.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "2.6.1",
+        "installed_version": "2.6.1",
+        "package": "aiohappyeyeballs",
+        "requirement": "aiohappyeyeballs==2.6.1",
+        "status": "exact"
+      },
+      {
+        "expected_version": "3.13.5",
+        "installed_version": "3.13.5",
+        "package": "aiohttp",
+        "requirement": "aiohttp==3.13.5",
+        "status": "exact"
+      },
+      {
+        "expected_version": "1.4.0",
+        "installed_version": "1.4.0",
+        "package": "aiosignal",
+        "requirement": "aiosignal==1.4.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "26.1.0",
+        "installed_version": "26.1.0",
+        "package": "attrs",
+        "requirement": "attrs==26.1.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "2026.2.25",
+        "installed_version": "2026.2.25",
+        "package": "certifi",
+        "requirement": "certifi==2026.2.25",
+        "status": "exact"
+      },
+      {
+        "expected_version": "2.13.2",
+        "installed_version": "2.13.2",
+        "package": "confluent-kafka",
+        "requirement": "confluent-kafka[protobuf,schemaregistry]==2.13.2",
+        "status": "exact"
+      },
+      {
+        "expected_version": "1.81.1",
+        "installed_version": "1.81.1",
+        "package": "grpcio-tools",
+        "requirement": "grpcio-tools==1.81.1",
+        "status": "exact"
+      },
+      {
+        "expected_version": "1.8.0",
+        "installed_version": "1.8.0",
+        "package": "frozenlist",
+        "requirement": "frozenlist==1.8.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "3.11",
+        "installed_version": "3.11",
+        "package": "idna",
+        "requirement": "idna==3.11",
+        "status": "exact"
+      },
+      {
+        "expected_version": "1.50.0",
+        "installed_version": "1.50.0",
+        "package": "influxdb-client",
+        "requirement": "influxdb-client==1.50.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "7.3.0",
+        "installed_version": "7.3.0",
+        "package": "ipykernel",
+        "requirement": "ipykernel==7.3.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "1.1.1",
+        "installed_version": "1.1.1",
+        "package": "jupyter",
+        "requirement": "jupyter==1.1.1",
+        "status": "exact"
+      },
+      {
+        "expected_version": "3.11.1",
+        "installed_version": "3.11.1",
+        "package": "matplotlib",
+        "requirement": "matplotlib==3.11.1",
+        "status": "exact"
+      },
+      {
+        "expected_version": "6.7.1",
+        "installed_version": "6.7.1",
+        "package": "multidict",
+        "requirement": "multidict==6.7.1",
+        "status": "exact"
+      },
+      {
+        "expected_version": "2.14.0",
+        "installed_version": "2.14.0",
+        "package": "nats-py",
+        "requirement": "nats-py==2.14.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "7.17.1",
+        "installed_version": "7.17.1",
+        "package": "nbconvert",
+        "requirement": "nbconvert==7.17.1",
+        "status": "exact"
+      },
+      {
+        "expected_version": "2.5.2",
+        "installed_version": "2.5.2",
+        "package": "numpy",
+        "requirement": "numpy==2.5.2",
+        "status": "exact"
+      },
+      {
+        "expected_version": "2.1.0",
+        "installed_version": "2.1.0",
+        "package": "paho-mqtt",
+        "requirement": "paho-mqtt==2.1.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "6.33.6",
+        "installed_version": "6.33.6",
+        "package": "protobuf",
+        "requirement": "protobuf==6.33.6",
+        "status": "exact"
+      },
+      {
+        "expected_version": "3.0.5",
+        "installed_version": "3.0.5",
+        "package": "pandas",
+        "requirement": "pandas==3.0.5",
+        "status": "exact"
+      },
+      {
+        "expected_version": "0.4.1",
+        "installed_version": "0.4.1",
+        "package": "propcache",
+        "requirement": "propcache==0.4.1",
+        "status": "exact"
+      },
+      {
+        "expected_version": "0.10.9.9",
+        "installed_version": "0.10.9.9",
+        "package": "py4j",
+        "requirement": "py4j==0.10.9.9",
+        "status": "exact"
+      },
+      {
+        "expected_version": "4.1.1",
+        "installed_version": "4.1.1",
+        "package": "pyspark",
+        "requirement": "pyspark==4.1.1",
+        "status": "exact"
+      },
+      {
+        "expected_version": "8.3.4",
+        "installed_version": "9.1.1",
+        "package": "pytest",
+        "requirement": "pytest==8.3.4",
+        "status": "mismatch"
+      },
+      {
+        "expected_version": "1.4.0",
+        "installed_version": "1.4.0",
+        "package": "pytest-asyncio",
+        "requirement": "pytest-asyncio==1.4.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "2.9.0.post0",
+        "installed_version": "2.9.0.post0",
+        "package": "python-dateutil",
+        "requirement": "python-dateutil==2.9.0.post0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "1.0.1",
+        "installed_version": "1.2.3",
+        "package": "python-dotenv",
+        "requirement": "python-dotenv==1.0.1",
+        "status": "mismatch"
+      },
+      {
+        "expected_version": "4.1.0",
+        "installed_version": "4.1.0",
+        "package": "reactivex",
+        "requirement": "reactivex==4.1.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "0.13.2",
+        "installed_version": "0.13.2",
+        "package": "seaborn",
+        "requirement": "seaborn==0.13.2",
+        "status": "exact"
+      },
+      {
+        "expected_version": "1.17.0",
+        "installed_version": "1.17.0",
+        "package": "six",
+        "requirement": "six==1.17.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "4.15.0",
+        "installed_version": "4.15.0",
+        "package": "typing_extensions",
+        "requirement": "typing_extensions==4.15.0",
+        "status": "exact"
+      },
+      {
+        "expected_version": "2.6.3",
+        "installed_version": "2.6.3",
+        "package": "urllib3",
+        "requirement": "urllib3==2.6.3",
+        "status": "exact"
+      },
+      {
+        "expected_version": "1.23.0",
+        "installed_version": "1.23.0",
+        "package": "yarl",
+        "requirement": "yarl==1.23.0",
+        "status": "exact"
+      }
+    ],
+    "dependency_validation": {
+      "issue_count": 2,
+      "issues": [
+        "pytest==8.3.4",
+        "python-dotenv==1.0.1"
+      ],
+      "status": "mismatch"
+    },
+    "machine": {
+      "architecture": "x86_64",
+      "logical_cpus": 12,
+      "memory_bytes": 33332183040,
+      "os": "Linux",
+      "os_release": "6.12.107+deb13-amd64",
+      "python_version": "3.13.5"
+    },
+    "python": "3.13.5",
+    "requirements_sha256": "baf6d26c6fd47337e7874e5707fc140a1057eae01e731b25ab061e8817689031"
+  },
+  "scale_tiers": [
+    {
+      "achieved_rate_msg_s": 29.98245116339667,
+      "backlog_messages": 0,
+      "duration_s": 10.00585303600019,
+      "p50_latency_ms": 11.25788688659668,
+      "p99_latency_ms": 14.944314956665039,
+      "patients": 6,
+      "reason": "Generated by scripts/run_scale_tier.py; full machine context is in the tier JSON.",
+      "signal_rate_hz": 1.0,
+      "status": "executed",
+      "target_rate_msg_s": 30.0,
+      "tier": "T1"
+    },
+    {
+      "patients": 24,
+      "reason": "Run on approved hardware and replace status only with generated CSV/JSON evidence.",
+      "signal_rate_hz": 100.0,
+      "status": "unexecuted",
+      "target_rate_msg_s": 12000.0,
+      "tier": "T2"
+    },
+    {
+      "patients": 50,
+      "reason": "Run on approved hardware and replace status only with generated CSV/JSON evidence.",
+      "signal_rate_hz": 250.0,
+      "status": "unexecuted",
+      "target_rate_msg_s": 62500.0,
+      "tier": "T3"
+    },
+    {
+      "patients": 100,
+      "reason": "Run on approved hardware and replace status only with generated CSV/JSON evidence.",
+      "signal_rate_hz": 250.0,
+      "status": "unexecuted",
+      "target_rate_msg_s": 125000.0,
+      "tier": "T4"
+    }
+  ]
+}

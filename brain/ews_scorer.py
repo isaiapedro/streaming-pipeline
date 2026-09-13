@@ -6,17 +6,29 @@ only difference between B and C is *when* this is invoked (see
 brain/ews_window.py). Approach A does not use this module at all — it is
 the pre-existing per-signal threshold evaluator (brain/evaluator.py).
 
-Dual SpO2 scale is mandatory: Scale 1 for standard patients, Scale 2 for
-COPD/hypercapnic patients (target SpO2 88-92%). Applying Scale 1 to a COPD
-patient scores SpO2=90 as 2 points; Scale 2 correctly scores it 0 — using
-the wrong scale corrupts FPR measurement for the COPD scenario.
+Dual SpO2 scale support is explicit. Scale 2 is selected only when the
+synthetic profile/scenario represents a documented Scale 2 prescription for
+confirmed hypercapnic respiratory failure; COPD alone is not sufficient.
 
 All v1 synthetic patients are on room air (no supplemental O2) and always
 conscious/alert — both subscores are fixed at 0, per plan-detailed.md scope.
 """
 
-ALARM_THRESHOLD = 5    # NEWS2 >= 5 -> high risk / urgent review
+from dataclasses import dataclass
+
+
+ALARM_THRESHOLD = 5    # NEWS2 >= 5 -> medium risk / urgent review
 EMERGENCY_THRESHOLD = 7  # NEWS2 >= 7 -> emergency response
+SINGLE_PARAMETER_ESCALATION_SCORE = 3
+VALID_SPO2_SCALES = (1, 2)
+
+
+@dataclass(frozen=True)
+class News2Assessment:
+    """The scoped room-air/alert NEWS2 result needed for escalation."""
+
+    total_score: int
+    max_parameter_score: int
 
 
 def _bucket(value: float, table: list[tuple[float, float, int]]) -> int:
@@ -78,7 +90,16 @@ _TEMP_TABLE = [
 REQUIRED_SIGNALS = ("respiratory_rate", "spo2", "systolic_bp", "heart_rate", "temperature")
 
 
-def subscore(signal_type: str, value: float, copd_flag: bool = False) -> int:
+def _validate_spo2_scale(spo2_scale: int) -> None:
+    if spo2_scale not in VALID_SPO2_SCALES:
+        raise ValueError(f"spo2_scale must be 1 or 2, got {spo2_scale!r}")
+
+
+def subscore(
+    signal_type: str,
+    value: float,
+    spo2_scale: int = 1,
+) -> int:
     # NEWS2 bands are defined on clinically-read granularity (whole counts
     # for RR/SpO2/BP/HR, 0.1 degC for temperature) — raw generator output is
     # continuous, so round to that granularity before bucketing. Without
@@ -87,7 +108,9 @@ def subscore(signal_type: str, value: float, copd_flag: bool = False) -> int:
     if signal_type == "respiratory_rate":
         return _bucket(round(value), _RR_TABLE)
     if signal_type == "spo2":
-        return _bucket(round(value), _SPO2_SCALE2_TABLE if copd_flag else _SPO2_SCALE1_TABLE)
+        _validate_spo2_scale(spo2_scale)
+        scale = spo2_scale
+        return _bucket(round(value), _SPO2_SCALE2_TABLE if scale == 2 else _SPO2_SCALE1_TABLE)
     if signal_type == "systolic_bp":
         return _bucket(round(value), _SYSBP_TABLE)
     if signal_type == "heart_rate":
@@ -97,7 +120,14 @@ def subscore(signal_type: str, value: float, copd_flag: bool = False) -> int:
     raise ValueError(f"Unknown NEWS2 signal: {signal_type}")
 
 
-def compute_news2(values: dict[str, float], copd_flag: bool = False) -> int:
+def assess_news2(values: dict[str, float], spo2_scale: int = 1) -> News2Assessment:
+    """Return total and largest parameter scores for escalation decisions."""
+    _validate_spo2_scale(spo2_scale)
+    scores = [subscore(sig, values[sig], spo2_scale=spo2_scale) for sig in REQUIRED_SIGNALS]
+    return News2Assessment(total_score=sum(scores), max_parameter_score=max(scores))
+
+
+def compute_news2(values: dict[str, float], spo2_scale: int = 1) -> int:
     """Aggregate NEWS2 score from the 5 required signals.
 
     `values` must contain all of REQUIRED_SIGNALS — supplemental O2 (0) and
@@ -105,13 +135,13 @@ def compute_news2(values: dict[str, float], copd_flag: bool = False) -> int:
     Raises KeyError if a required signal is missing — callers must check
     window completeness first (see PatientEWSState.composite_score).
     """
-    total = sum(subscore(sig, values[sig], copd_flag=copd_flag) for sig in REQUIRED_SIGNALS)
-    return total  # + supplemental_o2(0) + consciousness(0)
+    return assess_news2(values, spo2_scale=spo2_scale).total_score
 
 
-def alarm_level(news2_score: int) -> str:
+def alarm_level(news2_score: int, max_parameter_score: int = 0) -> str:
+    """Map total and single-parameter scores to project escalation labels."""
     if news2_score >= EMERGENCY_THRESHOLD:
         return "critical"
-    if news2_score >= ALARM_THRESHOLD:
+    if news2_score >= ALARM_THRESHOLD or max_parameter_score >= SINGLE_PARAMETER_ESCALATION_SCORE:
         return "warning"
     return "ok"

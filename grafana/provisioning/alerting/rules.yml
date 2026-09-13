@@ -1,0 +1,56 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: synthetic-patient-monitoring
+    folder: Academic prototype
+    interval: 1m
+    rules:
+      - uid: synthetic-critical-news2
+        title: Synthetic critical NEWS2 event
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        isPaused: true
+        annotations:
+          description: "Synthetic test only. Approve a notification destination before activation."
+          summary: "A synthetic NEWS2 critical event was observed."
+        labels:
+          data_class: synthetic
+          severity: critical
+        data:
+          - refId: A
+            relativeTimeRange: {from: 60, to: 0}
+            datasourceUid: influxdb-cloud
+            model:
+              datasource: {type: influxdb, uid: influxdb-cloud}
+              intervalMs: 1000
+              maxDataPoints: 43200
+              query: >-
+                from(bucket: "vitals")
+                  |> range(start: -1m)
+                  |> filter(fn: (r) => r._measurement == "alarms" and r._field == "news2_score")
+                  |> filter(fn: (r) => r.alarm_level == "critical" and r.scenario_id != "none")
+                  |> count()
+          - refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              expression: A
+              reducer: last
+              type: reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              expression: B
+              type: threshold
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query

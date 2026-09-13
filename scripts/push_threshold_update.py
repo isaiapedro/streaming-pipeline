@@ -20,15 +20,15 @@ import nats
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from brain.config_watcher import push_thresholds
-from config.settings import NATS_URL
-from config.thresholds import SIGNAL_THRESHOLDS
+from config.settings import nats_connection_options
+from config.thresholds import SIGNAL_THRESHOLDS, get_threshold_snapshot
 
 
 async def main(signal_type: str, overrides: dict) -> None:
-    nc = await nats.connect(NATS_URL)
+    nc = await nats.connect(**nats_connection_options())
     js = nc.jetstream()
 
-    new_thresholds = {k: dict(v) for k, v in SIGNAL_THRESHOLDS.items()}
+    new_thresholds = {k: dict(v) for k, v in get_threshold_snapshot().values.items()}
     new_thresholds.setdefault(signal_type, {})
     new_thresholds[signal_type].update(overrides)
 

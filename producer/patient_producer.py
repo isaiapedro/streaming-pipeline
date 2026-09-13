@@ -10,7 +10,6 @@ readings across signals.
 """
 
 import asyncio
-import json
 import time
 import logging
 from typing import Any
@@ -27,6 +26,8 @@ from data.generators.correlation import correlated_delta
 from data.generators.noise import NoiseInjector
 from data.scenarios.definitions import Scenario
 from producer.mqtt_producer import MqttPublisher
+from config.settings import PIPELINE_VERSION, SCHEMA_VERSION
+from schema import vitals_pb2
 
 log = logging.getLogger(__name__)
 
@@ -124,26 +125,41 @@ class PatientProducer:
                 publish_value, publish_ts = self._noise.apply(signal_type, value, ts)
 
             if publish_value is not None:
-                payload = {
-                    "patient_id": self.patient_id, "signal_type": signal_type,
-                    "value": publish_value, "timestamp": publish_ts,
-                }
+                payload = vitals_pb2.VitalSign(
+                    patient_id=self.patient_id,
+                    signal_type=signal_type,
+                    timestamp_ms=publish_ts,
+                    schema_version=SCHEMA_VERSION,
+                    pipeline_version=PIPELINE_VERSION,
+                )
+                if signal_type == "blood_pressure":
+                    payload.bp.systolic = float(publish_value["systolic"])
+                    payload.bp.diastolic = float(publish_value["diastolic"])
+                else:
+                    payload.scalar_value = float(publish_value)
                 if self._scenario is not None:
-                    payload["scenario_id"] = self._scenario.scenario_id
-                    payload["onset_offset_ms"] = self._scenario.onset_offset_ms
+                    payload.scenario_id = self._scenario.scenario_id
+                    payload.onset_offset_ms = self._scenario.onset_offset_ms
 
                 subject = f"vitals.{self.patient_id}.{signal_type}"
-                encoded = json.dumps(payload).encode()
+                encoded = payload.SerializeToString()
                 try:
-                    await self._js.publish(subject, encoded)
-                    log.debug("%s → %s", subject, publish_value)
+                    await self._js.publish(
+                        subject, encoded,
+                        headers={"Nats-Msg-Id": f"{self.patient_id}:{signal_type}:{publish_ts}"},
+                    )
+                    log.debug(
+                        "Published synthetic vital: signal=%s scenario=%s",
+                        signal_type,
+                        self._scenario.scenario_id if self._scenario is not None else "baseline",
+                    )
                 except Exception as exc:
-                    log.warning("NATS publish failed for %s: %s", subject, exc)
+                    log.warning("NATS publish failed for signal=%s error=%s", signal_type, type(exc).__name__)
                 if self._mqtt is not None:
                     try:
-                        self._mqtt.publish(subject, encoded)
+                        self._mqtt.publish(subject.replace(".", "/"), encoded)
                     except Exception as exc:
-                        log.warning("MQTT publish failed for %s: %s", subject, exc)
+                        log.warning("MQTT publish failed for signal=%s error=%s", signal_type, type(exc).__name__)
             else:
                 log.debug("%s dropped (noise injection)", signal_type)
 

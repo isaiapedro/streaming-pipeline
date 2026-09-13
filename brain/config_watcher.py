@@ -2,16 +2,15 @@
 of per-signal thresholds without restarting the brain service.
 
 plan-detailed.md L2: cloud operator writes to JetStream KV bucket
-`CONFIG`, key `thresholds` -> brain watches -> updates in-memory
-`config.thresholds.SIGNAL_THRESHOLDS` in place. Per-alarm cloud
+`CONFIG`, key `thresholds` -> brain watches -> installs an immutable
+threshold/version snapshot. Per-alarm cloud
 *suppression* (`brain/suppress.{patient_id}`) is part of the two-tier
 local/cloud split architecture from `plan.md` that doesn't exist yet in
 this single-service brain — out of scope here; threshold hot-reload only.
 
-`config.thresholds.SIGNAL_THRESHOLDS` is mutated **in place** (`.clear()` +
-`.update()`), not rebound — `brain/evaluator.py` holds a reference to the
-same dict object via `from config.thresholds import SIGNAL_THRESHOLDS`, so
-an in-place mutation is visible to it immediately without re-importing.
+The watcher validates the complete replacement before one atomic assignment.
+Scoring captures that snapshot once, preventing a score from being labelled
+with a version belonging to another threshold set.
 """
 
 import asyncio
@@ -46,6 +45,7 @@ async def push_thresholds(js, new_thresholds: dict) -> None:
     """
     kv = await get_or_create_bucket(js)
     payload = dict(new_thresholds)
+    payload["_threshold_version"] = thresholds_module.threshold_version(new_thresholds)
     payload["_pushed_at"] = time.time()
     await kv.put(KEY, json.dumps(payload).encode())
 
@@ -67,21 +67,29 @@ async def watch_thresholds(js, on_update=None) -> None:
         except json.JSONDecodeError:
             log.warning("Bad JSON in %s/%s (revision %d), ignoring", BUCKET, KEY, entry.revision)
             continue
+        if not isinstance(payload, dict):
+            log.warning("Non-object JSON in %s/%s (revision %d), ignoring", BUCKET, KEY, entry.revision)
+            continue
 
         pushed_at = payload.pop("_pushed_at", None)
-        latency_s = (time.time() - pushed_at) if pushed_at is not None else None
+        supplied_version = payload.pop("_threshold_version", None)
+        latency_s = (time.time() - float(pushed_at)) if isinstance(pushed_at, (int, float)) else None
         # A watcher that starts after the KV key already has a value replays
         # that value first (JetStream KV catch-up) — its `_pushed_at` is from
         # whenever it was originally written, not "just now", so a huge
         # latency here is a stale replay, not a real propagation delay.
         is_live_update = latency_s is not None and latency_s < 10.0
 
-        thresholds_module.SIGNAL_THRESHOLDS.clear()
-        thresholds_module.SIGNAL_THRESHOLDS.update(payload)
+        try:
+            snapshot = thresholds_module.install_thresholds(payload, supplied_version)
+        except ValueError as exc:
+            log.warning("Invalid thresholds in %s/%s revision %d: %s", BUCKET, KEY, entry.revision, exc)
+            continue
         if is_live_update:
-            log.info("Thresholds hot-reloaded (KV revision %d) — propagation %.1fms: %s",
-                      entry.revision, latency_s * 1000, payload)
+            log.info("Thresholds hot-reloaded (KV revision %d, version %s) — propagation %.1fms",
+                     entry.revision, snapshot.version, latency_s * 1000)
         else:
-            log.info("Thresholds loaded (KV revision %d, startup/replayed value): %s", entry.revision, payload)
+            log.info("Thresholds loaded (KV revision %d, version %s, startup/replayed value)",
+                     entry.revision, snapshot.version)
         if on_update is not None:
-            on_update(payload, latency_s if is_live_update else None)
+            on_update(snapshot, latency_s if is_live_update else None)

@@ -42,11 +42,16 @@ def score_approach_a(signal_type: str, value) -> list[ScoredAlarm]:
 
 
 def score_composite(state: PatientEWSState, now_ms: int, scoring_approach: str) -> ScoredAlarm | None:
-    """Shared B/C scoring point. Returns None if the window has never been fully seeded."""
-    score, complete = state.composite_score(now_ms)
-    if score is None:
+    """Shared B/C scoring point. Incomplete or stale windows fail closed."""
+    assessment, complete = state.composite_assessment(now_ms)
+    if assessment is None:
         return None
-    return ScoredAlarm(scoring_approach, alarm_level(score), news2_score=score, window_complete=complete)
+    return ScoredAlarm(
+        scoring_approach,
+        alarm_level(assessment.total_score, assessment.max_parameter_score),
+        news2_score=assessment.total_score,
+        window_complete=complete,
+    )
 
 
 class BatchScheduler:

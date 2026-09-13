@@ -24,6 +24,7 @@ class Scenario:
     shape: str                   # "ramp_sustained" | "step_sustained" | "spike_recover" | "none"
     recover_ms: int = 0          # used by "spike_recover"
     copd_flag_override: bool | None = None
+    news2_spo2_scale_override: int | None = None
     expect_alarm: bool = True    # ground truth: should a *correct* detector fire?
 
     def delta_at(self, elapsed_ms: int) -> dict:
@@ -78,6 +79,10 @@ SCENARIOS: dict[str, Scenario] = {
         peak_deltas={"respiratory_rate": 14, "spo2": -8, "heart_rate": 15},
         shape="ramp_sustained",
         copd_flag_override=True,
+        # Synthetic protocol assumption: this scenario represents a patient
+        # with a documented Scale 2 prescription for confirmed hypercapnic
+        # respiratory failure. COPD alone must not select Scale 2.
+        news2_spo2_scale_override=2,
     ),
     "false_positive_storm": Scenario(
         scenario_id="false_positive_storm",

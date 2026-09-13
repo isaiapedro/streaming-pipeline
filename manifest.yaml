@@ -1,0 +1,5 @@
+name: "academic_workspace"
+type: "research_development_workspace"
+version: "1.0.0"
+description: "Core thesis architecture, experiment metrics telemetry, and academic codebases"
+status: "active"

@@ -24,17 +24,23 @@ Usage:
 
 import argparse
 import asyncio
+import csv
 import json
+import math
+import os
+import platform
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import nats
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.settings import NATS_URL
 from producer.patient_producer import PatientProducer
+from config.settings import PIPELINE_VERSION, SCHEMA_VERSION, nats_connection_options
+from schema import vitals_pb2
 
 TIERS = {
     "T1": (6, 1.0),
@@ -60,7 +66,31 @@ def _make_profiles(n: int) -> list[dict]:
     ]
 
 
-async def run(n_patients: int, hz: float, duration_s: float, pull_timeout: float = 0.1) -> None:
+def machine_context() -> dict:
+    """Return useful, non-identifying execution context (never a hostname)."""
+    memory_bytes = None
+    try:
+        memory_bytes = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    except (AttributeError, OSError, ValueError):
+        pass
+    return {
+        "os": platform.system(),
+        "os_release": platform.release(),
+        "architecture": platform.machine(),
+        "logical_cpus": os.cpu_count(),
+        "memory_bytes": memory_bytes,
+        "python_version": platform.python_version(),
+    }
+
+
+async def run(
+    n_patients: int,
+    hz: float,
+    duration_s: float,
+    pull_timeout: float = 0.1,
+    tier: str = "custom",
+    connection_options: dict | None = None,
+) -> dict:
     target_msg_s = n_patients * hz * 5  # 5 signals per patient
     print(f"Tier: {n_patients} patients @ {hz}Hz -> target ~{target_msg_s:.0f} msg/s, "
           f"window {duration_s}s, pull_timeout={pull_timeout}s")
@@ -71,7 +101,10 @@ async def run(n_patients: int, hz: float, duration_s: float, pull_timeout: float
           "down for low tiers, up for high tiers where CPU-spin from constant polling "
           "would otherwise dominate instead.")
 
-    nc_pub = await nats.connect(NATS_URL)
+    options = dict(connection_options or nats_connection_options())
+    options.setdefault("allow_reconnect", False)
+    options.setdefault("connect_timeout", 2)
+    nc_pub = await nats.connect(**options)
     js_pub = nc_pub.jetstream()
 
     stream_name = f"SCALE_{int(time.time())}"
@@ -87,7 +120,7 @@ async def run(n_patients: int, hz: float, duration_s: float, pull_timeout: float
         for p in producers
     ]
 
-    nc_sub = await nats.connect(NATS_URL)
+    nc_sub = await nats.connect(**options)
     js_sub = nc_sub.jetstream()
     sub = await js_sub.pull_subscribe("scale.>", durable="SCALE_READER", stream=stream_name)
 
@@ -103,8 +136,8 @@ async def run(n_patients: int, hz: float, duration_s: float, pull_timeout: float
         now = time.time()
         for msg in msgs:
             try:
-                data = json.loads(msg.data)
-                latencies.append((now - data["timestamp"] / 1000) * 1000)
+                data = vitals_pb2.VitalSign.FromString(msg.data)
+                latencies.append((now - data.timestamp_ms / 1000) * 1000)
             except Exception:
                 pass
             await msg.ack()
@@ -121,6 +154,10 @@ async def run(n_patients: int, hz: float, duration_s: float, pull_timeout: float
     except Exception:
         backlog = None
 
+    try:
+        await sub.unsubscribe()
+    except Exception:
+        pass
     try:
         await js_pub.delete_stream(stream_name)
     except Exception:
@@ -143,6 +180,39 @@ async def run(n_patients: int, hz: float, duration_s: float, pull_timeout: float
         print(f"BOTTLENECK: achieved throughput ({achieved_msg_s:.0f}/s) is well below "
               f"target ({target_msg_s:.0f}/s) — producer client (this process, asyncio/GIL-bound) "
               f"is the likely first saturation point at this scale, not the NATS broker itself.")
+    return {
+        "tier": tier,
+        "status": "executed",
+        "target_rate_msg_s": target_msg_s,
+        "achieved_rate_msg_s": achieved_msg_s,
+        "p50_latency_ms": None if math.isnan(p50) else p50,
+        "p99_latency_ms": None if math.isnan(p99) else p99,
+        "backlog_messages": backlog,
+        "duration_s": elapsed,
+        "patients": n_patients,
+        "signal_rate_hz": hz,
+        "pull_timeout_s": pull_timeout,
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(),
+        "machine": machine_context(),
+    }
+
+
+def write_result(result: dict, csv_path: Path | None, json_path: Path | None) -> None:
+    if json_path:
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        with json_path.open("w") as handle:
+            json.dump(result, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    if csv_path:
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        flat = {key: value for key, value in result.items() if key != "machine"}
+        flat.update({f"machine_{key}": value for key, value in result["machine"].items()})
+        exists = csv_path.exists() and csv_path.stat().st_size > 0
+        with csv_path.open("a", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(flat))
+            if not exists:
+                writer.writeheader()
+            writer.writerow({key: "" if value is None else value for key, value in flat.items()})
 
 
 async def _run_all_signals(producer: PatientProducer, interval: float, stream_name: str) -> None:
@@ -154,12 +224,22 @@ async def _run_all_signals(producer: PatientProducer, interval: float, stream_na
         ts = int(time.time() * 1000)
         for signal_type, gen in producer._generators.items():
             value = gen.generate(ts)
-            payload = json.dumps({
-                "patient_id": producer.patient_id, "signal_type": signal_type,
-                "value": value, "timestamp": ts,
-            }).encode()
+            payload = vitals_pb2.VitalSign(
+                patient_id=producer.patient_id,
+                signal_type=signal_type,
+                timestamp_ms=ts,
+                schema_version=SCHEMA_VERSION,
+                pipeline_version=PIPELINE_VERSION,
+            )
+            if signal_type == "blood_pressure":
+                payload.bp.systolic = float(value["systolic"])
+                payload.bp.diastolic = float(value["diastolic"])
+            else:
+                payload.scalar_value = float(value)
             try:
-                await producer._js.publish(f"scale.{producer.patient_id}.{signal_type}", payload)
+                await producer._js.publish(
+                    f"scale.{producer.patient_id}.{signal_type}", payload.SerializeToString()
+                )
             except Exception:
                 pass
         await asyncio.sleep(interval)
@@ -173,6 +253,10 @@ if __name__ == "__main__":
     parser.add_argument("--duration", type=float, default=20.0)
     parser.add_argument("--pull-timeout", type=float, default=0.1,
                          help="Pull-consumer fetch() timeout in seconds — dominates latency at low tiers")
+    parser.add_argument("--csv-out", type=Path, help="Append the result as a flat CSV row")
+    parser.add_argument("--json-out", type=Path, help="Write the result and machine context as JSON")
+    parser.add_argument("--nats-url",
+                        help="Explicit broker URL for an isolated evidence run; bypasses env TLS/auth options")
     args = parser.parse_args()
 
     if args.tier:
@@ -182,4 +266,8 @@ if __name__ == "__main__":
     else:
         parser.error("Pass --tier or both --patients and --hz")
 
-    asyncio.run(run(n, hz, args.duration, args.pull_timeout))
+    connection_options = {"servers": args.nats_url} if args.nats_url else None
+    result = asyncio.run(
+        run(n, hz, args.duration, args.pull_timeout, args.tier or "custom", connection_options)
+    )
+    write_result(result, args.csv_out, args.json_out)

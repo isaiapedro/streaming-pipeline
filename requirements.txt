@@ -4,7 +4,8 @@ aiohttp==3.13.5
 aiosignal==1.4.0
 attrs==26.1.0
 certifi==2026.2.25
-confluent-kafka==2.13.2
+confluent-kafka[protobuf,schemaregistry]==2.13.2
+grpcio-tools==1.81.1
 frozenlist==1.8.0
 idna==3.11
 influxdb-client==1.50.0
@@ -16,6 +17,7 @@ nats-py==2.14.0
 nbconvert==7.17.1
 numpy==2.5.2
 paho-mqtt==2.1.0
+protobuf==6.33.6
 pandas==3.0.5
 propcache==0.4.1
 py4j==0.10.9.9

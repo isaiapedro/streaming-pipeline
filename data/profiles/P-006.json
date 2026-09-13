@@ -27,5 +27,6 @@
       "std": 0.5
     }
   },
-  "copd_flag": false
+  "copd_flag": false,
+  "news2_spo2_scale": 1
 }

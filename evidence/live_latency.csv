@@ -1,0 +1,3 @@
+metric,count,p50_ms,p99_ms,method,status,notes
+publish_to_consume,100,1.2265625,1.8173828125,live_measured,executed,JetStream fetch and Protobuf decode completed
+publish_to_successful_storage,0,,,unavailable,unexecuted,not requested (--skip-storage)

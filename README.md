@@ -4,7 +4,8 @@
 
 Building a real-time patient vitals monitoring system in two scopes:
 - **MVP (6 patients)**: Lean distributed pipeline — NATS JetStream edge buffer + async Python processing + InfluxDB Cloud + Grafana Cloud
-- **Research scope (500 patients)**: Full hospital-scale with Kafka, Spark, compression — documented as future work only, not implemented
+- **Research comparison**: Isolated local Kafka + Schema Registry path using the same Protobuf contract
+- **Research scope (500 patients)**: Full hospital-scale deployment with Kafka, Spark, and compression — future work, not implemented
 
 ---
 
@@ -34,7 +35,7 @@ Grafana Cloud (free tier)
 - InfluxDB Cloud + Grafana Cloud (both free tier)
 
 ### What's explicitly out of scope (deferred to research document)
-- Kafka (AWS MSK / Confluent Cloud)
+- Production or hosted Kafka (AWS MSK / Confluent Cloud); the local comparison profile is not a production design
 - PySpark / stream processing frameworks
 - ZSTD batch compression
 - Raw ECG waveform at 250Hz (too many writes for free tier; use heart_rate scalar instead)
@@ -44,7 +45,7 @@ Grafana Cloud (free tier)
 
 ## Why this is still "distributed"
 
-NATS JetStream is a proper distributed messaging system. Producer and consumer are fully decoupled — the generator scripts have no knowledge of the Brain service. Storage is remote (InfluxDB Cloud). This is a legitimate distributed pipeline; Kafka/Spark are deferred because they add operational complexity that isn't justified at 6 patients.
+NATS JetStream is a proper distributed messaging system. Producer and consumer are fully decoupled — the generator scripts have no knowledge of the Brain service. Storage is remote (InfluxDB Cloud). This is a legitimate distributed pipeline. The isolated local Kafka/Schema Registry path exists only for research comparison; hosted Kafka and Spark remain deferred because their operational complexity is not justified for the six-patient MVP.
 
 ---
 
@@ -52,7 +53,7 @@ NATS JetStream is a proper distributed messaging system. Producer and consumer a
 
 ```
 tcc/
-├── docker-compose.yml          # NATS JetStream only
+├── docker-compose.yml          # NATS plus opt-in secure and Kafka profiles
 ├── requirements.txt
 ├── README.md
 │
@@ -80,6 +81,7 @@ tcc/
 │   ├── main.py                 # Entry point: subscribes to NATS, runs eval loop
 │   ├── evaluator.py            # Threshold logic → alarm_level string
 │   └── influx_writer.py        # Batched async writes to InfluxDB Cloud
+├── kafka_path/                 # Isolated Protobuf Kafka producer/consumer/provisioning
 │
 ├── grafana/
 │   └── provisioning/
@@ -89,7 +91,8 @@ tcc/
 │           └── vitals.json     # State timeline + per-signal panels
 │
 └── scripts/
-    └── create_streams.sh       # NATS JetStream stream/consumer init
+    ├── create_streams.sh       # NATS JetStream stream/consumer init
+    └── create_kafka_topics.sh  # Idempotent research-topic provisioning
 ```
 
 ---
@@ -133,12 +136,76 @@ vitals.{patient_id}.spo2
 vitals.{patient_id}.blood_pressure   → {systolic, diastolic} in payload
 vitals.{patient_id}.respiratory_rate
 vitals.{patient_id}.temperature
+dlq.vitals.nats                       → rejected Protobuf envelopes (separate stream)
+alarms.{patient_id}.medium|high        → local NEWS2 alarm events
 ```
 
-Kafka message format (JSON):
-```json
-{"patient_id": "P-001", "signal_type": "heart_rate", "value": 104.3, "timestamp": 1744123456789}
+### Message validation and local alarm path
+
+All active producer and consumer paths use the canonical Protobuf contract in
+`schema/proto/vitals.proto`. The brain validates each decoded message before
+it can update an EWS window. Malformed or structurally invalid messages are
+published as `DeadLetterEnvelope` records to `dlq.vitals.nats` in the separate
+`VITALS_DLQ` stream, so rejection traffic cannot be consumed as vital input.
+
+Run the local NEWS2 alarm path separately with:
+
+```bash
+python -m brain.local_scorer
 ```
+
+It publishes NEWS2 scores 5–6, or a single parameter scoring 3, to
+`alarms.{patient_id}.medium`; scores ≥7 go to `alarms.{patient_id}.high`.
+Composite scores require all five scoped inputs to be fresh. SpO2 Scale 1 is
+the default, and Scale 2 is selected only through an explicit
+`news2_spo2_scale` profile field representing a documented prescription—not
+from `copd_flag`. Generate a development TLS certificate before
+a secured deployment with `bash scripts/generate_dev_tls.sh`; certificates and
+credentials are intentionally not tracked.
+
+For the secure NATS profile, create a local `.env` containing unique `NATS_USER`,
+`NATS_PASSWORD`, `NATS_TLS=true`, `NATS_CA_FILE=./nats/certs/nats-cert.pem`,
+and `NATS_URL=nats://localhost:4222`; then run
+`docker compose --profile secure up -d nats-secure`.
+
+Set `REQUIRE_NATS_INTEGRATION=true` when running the NATS integration tests in
+CI or an explicit live verification. Without that flag, an unavailable broker
+is reported as a bounded skip; with it, connection, authentication, and trust
+failures fail the test run.
+
+For synthetic-distribution validation, supply approved reference and synthetic
+CSVs with the five documented signal columns:
+
+```bash
+python scripts/validate_distributions.py --reference reference.csv \
+  --synthetic synthetic.csv --source-id APPROVED_SOURCE_ID \
+  --transformation-method VERSIONED_METHOD_ID \
+  --out-dir distribution_validation
+```
+
+### Isolated Kafka/Schema Registry comparison
+
+Kafka is an opt-in research transport and does not replace the NATS MVP entry
+points. It uses Schema Registry-framed Protobuf on `vitals.protobuf.v1` and
+`vitals.dlq.protobuf.v1`, with `BACKWARD_TRANSITIVE` compatibility, patient ID
+keys, idempotent production, and explicit consumer commits. Runtime schema
+auto-registration is disabled; provisioning owns registration and compatibility
+checks.
+
+The fixed loopback ports `19092` (Kafka) and `18081` (Schema Registry) are
+reserved to the Academic workspace in the root port registry.
+
+```bash
+docker compose --profile kafka up -d --wait kafka schema-registry
+bash scripts/create_kafka_topics.sh
+python -m kafka_path.provision
+REQUIRE_KAFKA_INTEGRATION=true python -m pytest brain/tests/test_integration_kafka.py -q
+python -m kafka_path.parity --live --count 20 --timeout 20 --format json
+docker compose --profile kafka stop schema-registry kafka
+```
+
+For a manual smoke test, run `python -m kafka_path.consumer --max-messages 1`
+and then `python -m kafka_path.producer` in another terminal.
 
 ### InfluxDB schema
 
@@ -174,8 +241,10 @@ SIGNAL_THRESHOLDS = {
 
 1. Async NATS subscriber receives message
 2. `evaluator.py` compares value against thresholds → returns `alarm_level` string
-3. Record appended to in-memory write buffer
-4. Buffer flushed to InfluxDB Cloud every 1s (or when buffer hits 500 records)
+3. All derived records are atomically committed to the local SQLite WAL outbox
+4. The broker message is acknowledged after that durable local commit
+5. Retryable batches are delivered to InfluxDB Cloud asynchronously; failures
+   remain in the outbox across restart
 
 ### Grafana alerting
 
@@ -190,6 +259,7 @@ SIGNAL_THRESHOLDS = {
 | Component | Hosting | Cost |
 |---|---|---|
 | NATS JetStream + all Python services | Hetzner CX21 (2 vCPU, 4GB RAM) | €4.50/month |
+| Local Kafka + Schema Registry | Docker Compose `kafka` profile (research only) | Local development only |
 | Cloud Kafka | — (out of scope) | — |
 | InfluxDB | InfluxDB Cloud free tier | $0 |
 | Grafana | Grafana Cloud free tier | $0 |
@@ -224,14 +294,26 @@ SIGNAL_THRESHOLDS = {
 
 ## Critical Files
 
-- [docker-compose.yml](docker-compose.yml) — NATS JetStream only (remove Kafka/Zookeeper)
-- Legacy `producer.py` / `spark_processor.py` (Kafka MVP) removed — fully migrated to `producer/patient_producer.py` (async NATS publisher) and `brain/` (evaluator + influx_writer, no Spark)
-- **New**: `config/settings.py`, `config/thresholds.py`, `data/generators/`, `data/profiles/`, `grafana/provisioning/`
+- [docker-compose.yml](docker-compose.yml) — NATS/Mosquitto plus opt-in secure-NATS and local Kafka comparison profiles
+- `producer/` and `brain/` — active NATS MVP producer, validation, scoring, and storage path
+- `kafka_path/` and `schema/` — isolated Protobuf/Schema Registry research comparison
+- `scripts/` and `evidence/` — non-interactive experiment tooling and privacy-safe derived evidence
+- `config/`, `data/`, and `grafana/provisioning/` — configuration, synthetic inputs, and dashboards
 
 ## Verification
 
-1. `docker compose up` → NATS JetStream healthy
-2. `python producer/main.py` → 6 patients publishing (`nats sub 'vitals.>'` shows messages)
-3. `python brain/main.py` → alarm_level appearing in InfluxDB Cloud
-4. Grafana Cloud dashboard auto-provisioned, state timeline shows alarm transitions
-5. Force a critical reading (set baseline above threshold in a profile) → Grafana alert fires
+1. Run the fresh-environment and port preflight in the operator guide.
+2. Run the complete offline test gate.
+3. Run required live NATS tests against an explicitly started local broker.
+4. Run storage, scale, protocol, Kafka, or Grafana gates only when their
+   documented infrastructure and governance prerequisites are satisfied.
+5. Generate release evidence only from a clean, frozen commit; never force an
+   outcome by editing a tracked patient profile during a final run.
+
+## Operator documentation
+
+Use [OPERATIONS_AND_REPRODUCIBILITY.md](OPERATIONS_AND_REPRODUCIBILITY.md) as
+the canonical guide for environment setup, feature behavior, ports,
+acknowledgement semantics, infrastructure profiles, evidence reproduction, and
+maintenance. Governance and remaining acceptance work are defined in
+[IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md).

@@ -26,10 +26,13 @@ class MqttPublisher:
         if reason_code != 0:
             log.warning("MQTT disconnected unexpectedly: %s", reason_code)
 
-    def publish(self, topic: str, payload: bytes) -> None:
+    def publish(self, topic: str, payload: bytes, *, timeout: float = 5.0) -> None:
         info = self._client.publish(topic, payload, qos=self.qos)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
-            log.warning("MQTT publish failed for %s: rc=%s", topic, info.rc)
+            raise RuntimeError(f"MQTT publish enqueue failed: rc={info.rc}")
+        info.wait_for_publish(timeout=timeout)
+        if not info.is_published():
+            raise TimeoutError("MQTT PUBACK was not received before timeout")
 
     def close(self) -> None:
         self._client.loop_stop()

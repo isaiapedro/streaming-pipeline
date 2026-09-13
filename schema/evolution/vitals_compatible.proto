@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package br.tcc.vitals;
+
+message BloodPressure {
+  optional float systolic = 1;
+  optional float diastolic = 2;
+}
+
+message VitalSign {
+  string patient_id = 1;
+  string signal_type = 2;
+  oneof value {
+    float scalar_value = 3;
+    BloodPressure bp = 4;
+  }
+  int64 timestamp_ms = 5;
+  string schema_version = 6;
+  string pipeline_version = 7;
+  string scenario_id = 8;
+  int64 onset_offset_ms = 9;
+  optional string source_system = 10;
+}
+
+message AlertEvent {
+  string patient_id = 1;
+  string priority = 2;
+  int32 news2_score = 3;
+  int64 timestamp_ms = 4;
+  string schema_version = 5;
+  string pipeline_version = 6;
+}
+
+message DeadLetterEnvelope {
+  bytes original_payload = 1;
+  string error_type = 2;
+  string error_message = 3;
+  string source_subject = 4;
+  int64 rejected_at_ms = 5;
+  string schema_version = 6;
+  string pipeline_version = 7;
+  string source_transport = 8;
+  string source_topic = 9;
+  int32 source_partition = 10;
+  int64 source_offset = 11;
+  int64 source_timestamp_ms = 12;
+}

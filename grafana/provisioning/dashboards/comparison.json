@@ -1,0 +1,86 @@
+{
+  "uid": "patient-vitals-comparison",
+  "title": "Synthetic Patient Monitoring — A/B/C Comparison",
+  "description": "Auditable comparison of threshold, batch NEWS2, and streaming NEWS2 paths.",
+  "tags": ["tcc", "synthetic", "comparison", "auditable"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-30m", "to": "now"},
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "bucket", "label": "Bucket", "type": "constant", "query": "vitals",
+        "current": {"text": "vitals", "value": "vitals"}, "hide": 2
+      },
+      {
+        "name": "patient", "label": "Synthetic patient", "type": "query", "includeAll": true,
+        "allValue": ".*", "multi": true,
+        "datasource": {"type": "influxdb", "uid": "influxdb-cloud"},
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"${bucket}\", tag: \"patient_id\", predicate: (r) => r._measurement == \"alarms\")"
+      },
+      {
+        "name": "scenario", "label": "Scenario", "type": "query", "includeAll": true,
+        "allValue": ".*", "multi": true,
+        "datasource": {"type": "influxdb", "uid": "influxdb-cloud"},
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"${bucket}\", tag: \"scenario_id\")"
+      },
+      {
+        "name": "approach", "label": "Approach", "type": "custom", "includeAll": true,
+        "allValue": ".*", "multi": true, "query": "A,B,C",
+        "current": {"text": ["All"], "value": ["$__all"]}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "NEWS2 score by approach",
+      "description": "B/C composite scores on the same time range. Approach A has no NEWS2 score.",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "datasource": {"type": "influxdb", "uid": "influxdb-cloud"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"alarms\" and r._field == \"news2_score\")\n  |> filter(fn: (r) => r.patient_id =~ /^${patient:regex}$/ and r.scenario_id =~ /^${scenario:regex}$/ and r.scoring_approach =~ /^${approach:regex}$/)\n  |> group(columns: [\"patient_id\", \"scenario_id\", \"scoring_approach\"])"
+      }],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 7}]}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 2, "type": "state-timeline", "title": "Alarm timing by approach",
+      "description": "Aligned event time makes relative A/B/C alarm timing visible; it is not labelled as live pipeline latency.",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "datasource": {"type": "influxdb", "uid": "influxdb-cloud"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"alarms\" and r._field == \"news2_score\")\n  |> filter(fn: (r) => r.patient_id =~ /^${patient:regex}$/ and r.scenario_id =~ /^${scenario:regex}$/ and r.scoring_approach =~ /^${approach:regex}$/)\n  |> map(fn: (r) => ({r with _value: if r.alarm_level == \"critical\" then 2 else if r.alarm_level == \"warning\" then 1 else 0}))\n  |> group(columns: [\"patient_id\", \"scoring_approach\"])"
+      }],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "OK", "color": "green"}, "1": {"text": "WARNING", "color": "yellow"}, "2": {"text": "CRITICAL", "color": "red"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 2}]}}, "overrides": []},
+      "options": {"mergeValues": true, "showValue": "auto", "legend": {"showLegend": true}}
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Alarm rate by approach",
+      "description": "Count of alarm observations per one-minute window; repeated scores are observations, not distinct clinical episodes.",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 7},
+      "datasource": {"type": "influxdb", "uid": "influxdb-cloud"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"alarms\" and r._field == \"news2_score\" and r.alarm_level != \"ok\")\n  |> filter(fn: (r) => r.patient_id =~ /^${patient:regex}$/ and r.scenario_id =~ /^${scenario:regex}$/ and r.scoring_approach =~ /^${approach:regex}$/)\n  |> group(columns: [\"scoring_approach\"])\n  |> aggregateWindow(every: 1m, fn: count, createEmpty: true)"
+      }],
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}}
+    },
+    {
+      "id": 4, "type": "table", "title": "Telemetry versions",
+      "description": "Latest schema, pipeline, threshold, and transport labels for each selected path.",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 7},
+      "datasource": {"type": "influxdb", "uid": "influxdb-cloud"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"alarms\")\n  |> filter(fn: (r) => r.patient_id =~ /^${patient:regex}$/ and r.scenario_id =~ /^${scenario:regex}$/ and r.scoring_approach =~ /^${approach:regex}$/)\n  |> group(columns: [\"patient_id\", \"scenario_id\", \"scoring_approach\", \"schema_version\", \"pipeline_version\", \"threshold_version\", \"transport\"])\n  |> last()\n  |> keep(columns: [\"_time\", \"patient_id\", \"scenario_id\", \"scoring_approach\", \"schema_version\", \"pipeline_version\", \"threshold_version\", \"transport\"])"
+      }],
+      "options": {"showHeader": true}
+    }
+  ]
+}

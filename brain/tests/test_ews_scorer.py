@@ -2,7 +2,15 @@
 
 import pytest
 
-from brain.ews_scorer import subscore, compute_news2, alarm_level, ALARM_THRESHOLD, EMERGENCY_THRESHOLD
+from brain.ews_scorer import (
+    ALARM_THRESHOLD,
+    EMERGENCY_THRESHOLD,
+    alarm_level,
+    assess_news2,
+    compute_news2,
+    subscore,
+)
+from brain.ews_window import PatientEWSState
 
 
 @pytest.mark.parametrize("value,expected", [
@@ -16,21 +24,24 @@ def test_respiratory_rate_boundaries(value, expected):
     (91, 3), (92, 2), (93, 2), (94, 1), (95, 1), (96, 0), (100, 0),
 ])
 def test_spo2_scale1_boundaries(value, expected):
-    assert subscore("spo2", value, copd_flag=False) == expected
+    assert subscore("spo2", value, spo2_scale=1) == expected
 
 
 @pytest.mark.parametrize("value,expected", [
     (83, 3), (84, 2), (85, 2), (86, 1), (87, 1), (88, 0), (92, 0), (100, 0),
 ])
 def test_spo2_scale2_boundaries(value, expected):
-    assert subscore("spo2", value, copd_flag=True) == expected
+    assert subscore("spo2", value, spo2_scale=2) == expected
 
 
 def test_spo2_scale_selection_diverges_at_90():
-    # SpO2=90 is the case plan-detailed.md flags: Scale 1 scores it 3 (false
-    # alarm territory for a COPD patient); Scale 2 correctly scores it 0.
-    assert subscore("spo2", 90, copd_flag=False) == 3
-    assert subscore("spo2", 90, copd_flag=True) == 0
+    assert subscore("spo2", 90, spo2_scale=1) == 3
+    assert subscore("spo2", 90, spo2_scale=2) == 0
+
+
+def test_spo2_scale_selection_is_explicit_and_validated():
+    with pytest.raises(ValueError, match="spo2_scale"):
+        subscore("spo2", 90, spo2_scale=3)
 
 
 @pytest.mark.parametrize("value,expected", [
@@ -77,6 +88,35 @@ def test_compute_news2_aggregates_all_five_signals():
 def test_compute_news2_missing_signal_raises():
     with pytest.raises(KeyError):
         compute_news2({"heart_rate": 80})
+
+
+def test_assessment_preserves_single_parameter_escalation():
+    values = {
+        "respiratory_rate": 8,
+        "spo2": 96,
+        "systolic_bp": 120,
+        "heart_rate": 75,
+        "temperature": 37.0,
+    }
+    assessment = assess_news2(values)
+    assert assessment.total_score == 3
+    assert assessment.max_parameter_score == 3
+    assert alarm_level(assessment.total_score, assessment.max_parameter_score) == "warning"
+
+
+def test_stale_composite_window_is_not_scored():
+    state = PatientEWSState("P-TEST", window_s=60)
+    values = {
+        "respiratory_rate": 16,
+        "spo2": 97,
+        "systolic_bp": 120,
+        "heart_rate": 75,
+        "temperature": 37.0,
+    }
+    for signal, value in values.items():
+        state.update(signal, value, timestamp_ms=1_000)
+    assert state.composite_score(now_ms=61_000) == (0, True)
+    assert state.composite_score(now_ms=61_001) == (None, False)
 
 
 @pytest.mark.parametrize("score,expected", [

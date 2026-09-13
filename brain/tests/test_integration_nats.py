@@ -12,39 +12,74 @@ that `brain/main.py` would otherwise make (this test has no test-specific
 InfluxDB target to write to safely).
 """
 
-import asyncio
-import json
+import os
 import time
+from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
 import nats
 import pytest
+from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 
-from brain.approaches import APPROACH_C, score_composite
-from brain.evaluator import evaluate_message
-from brain.ews_window import PatientEWSState
-from config.settings import NATS_URL
+from brain.approaches import BatchScheduler
+from brain.main import _process
+from brain.influx_writer import InfluxWriter
+from config.settings import nats_connection_options
+from brain.validation import DLQ_SUBJECT
+from schema import vitals_pb2
 
-TEST_PATIENT = "P-TEST-INTEGRATION"
-TEST_DURABLE = "BRAIN_TEST_INTEGRATION"
+def _skip_or_fail(message: str) -> None:
+    if os.getenv("REQUIRE_NATS_INTEGRATION", "false").lower() == "true":
+        pytest.fail(message)
+    pytest.skip(message)
 
 
 async def _try_connect():
+    options = nats_connection_options()
+    servers = options["servers"]
+
+    def numeric_loopback(server):
+        parsed = urlsplit(server)
+        if parsed.hostname != "localhost":
+            return server
+        auth, separator, _host = parsed.netloc.rpartition("@")
+        prefix = f"{auth}{separator}" if separator else ""
+        port = f":{parsed.port}" if parsed.port is not None else ""
+        return urlunsplit(parsed._replace(netloc=f"{prefix}127.0.0.1{port}"))
+
+    options["servers"] = (
+        numeric_loopback(servers)
+        if isinstance(servers, str)
+        else [numeric_loopback(server) for server in servers]
+    )
+    # Keep the availability check inside the NATS client's lifecycle.  A
+    # cancelled localhost DNS lookup can leave its executor worker pending and
+    # hang pytest's event-loop shutdown when no broker is running.
+    options.update(
+        allow_reconnect=False,
+        connect_timeout=1,
+        max_reconnect_attempts=1,
+        reconnect_time_wait=0,
+    )
     try:
-        return await asyncio.wait_for(nats.connect(NATS_URL), timeout=2.0)
+        return await nats.connect(**options)
     except Exception:
         return None
 
 
 @pytest.mark.asyncio
-async def test_nats_to_scoring_end_to_end():
+async def test_nats_to_scoring_end_to_end(tmp_path):
     nc = await _try_connect()
     if nc is None:
-        pytest.skip(
-            f"NATS not reachable at {NATS_URL} — start it with "
+        _skip_or_fail(
+            "NATS not reachable — start it with "
             f"`docker compose up -d nats` and `bash scripts/create_streams.sh` to run this test"
         )
 
     js = nc.jetstream()
+    suffix = uuid4().hex[:12]
+    patient_id = f"P-TEST-{suffix}"
+    durable = f"BRAIN_TEST_{suffix}"
 
     # One full round of vitals, deliberately deteriorating so both Approach A
     # (per-signal) and the composite score should alarm.
@@ -57,37 +92,96 @@ async def test_nats_to_scoring_end_to_end():
         "temperature": 39.2,
     }
     for signal_type, value in readings.items():
-        payload = {"patient_id": TEST_PATIENT, "signal_type": signal_type, "value": value, "timestamp": ts}
-        await js.publish(f"vitals.{TEST_PATIENT}.{signal_type}", json.dumps(payload).encode())
+        payload = vitals_pb2.VitalSign(
+            patient_id=patient_id, signal_type=signal_type, timestamp_ms=ts,
+            schema_version="1", pipeline_version="test",
+        )
+        if signal_type == "blood_pressure":
+            payload.bp.systolic = value["systolic"]
+            payload.bp.diastolic = value["diastolic"]
+        else:
+            payload.scalar_value = value
+        await js.publish(f"vitals.{patient_id}.{signal_type}", payload.SerializeToString())
 
     try:
-        sub = await js.pull_subscribe(f"vitals.{TEST_PATIENT}.>", durable=TEST_DURABLE, stream="VITALS")
+        sub = await js.pull_subscribe(f"vitals.{patient_id}.>", durable=durable, stream="VITALS")
         msgs = await sub.fetch(len(readings), timeout=5.0)
         assert len(msgs) == len(readings), f"expected {len(readings)} messages, got {len(msgs)}"
 
-        ews_state = PatientEWSState(TEST_PATIENT, copd_flag=False)
-        approach_a_alarms = []
+        writer = InfluxWriter(outbox_path=tmp_path / "outbox.sqlite3")
+        writer._open_outbox()
+        states = {}
+        scheduler = BatchScheduler()
         for msg in msgs:
-            data = json.loads(msg.data)
-            signal_type, value, timestamp = data["signal_type"], data["value"], data["timestamp"]
-
-            for sig, _val, level in evaluate_message(signal_type, value):
-                if level != "ok":
-                    approach_a_alarms.append((sig, level))
-
-            if signal_type == "blood_pressure":
-                ews_state.update("systolic_bp", value["systolic"], timestamp)
-            else:
-                ews_state.update(signal_type, value, timestamp)
-            await msg.ack()
-
-        score_c = score_composite(ews_state, ts, APPROACH_C)
-
-        assert approach_a_alarms, "Approach A should have alarmed on at least one signal"
-        assert score_c is not None and score_c.alarm_level != "ok", "Approach C composite score should alarm"
+            await _process(
+                msg,
+                {patient_id: {"condition": "synthetic", "news2_spo2_scale": 1}},
+                states,
+                scheduler,
+                writer,
+                js,
+            )
+        assert writer.pending_count >= len(readings)
+        payloads = [
+            row[0]
+            for row in writer._db.execute("SELECT payload FROM outbox ORDER BY id").fetchall()
+        ]
+        assert any('"scoring_approach":"A"' in payload for payload in payloads)
+        assert any('"scoring_approach":"C"' in payload for payload in payloads)
+        writer._db.close()
+        writer._db = None
     finally:
         try:
-            await js.delete_consumer("VITALS", TEST_DURABLE)
+            await js.delete_consumer("VITALS", durable)
         except Exception:
             pass
+        await nc.close()
+
+
+@pytest.mark.asyncio
+async def test_invalid_nats_payload_is_dead_lettered_before_scoring():
+    nc = await _try_connect()
+    if nc is None:
+        _skip_or_fail("NATS not reachable for DLQ integration test")
+    js = nc.jetstream()
+    suffix = uuid4().hex[:12]
+    source_subject = f"vitals.P-DLQ-{suffix}.heart_rate"
+    durable, dlq_durable = f"BRAIN_TEST_DLQ_{suffix}", f"BRAIN_TEST_DLQ_READER_{suffix}"
+
+    class Writer:
+        calls = []
+
+        async def enqueue(self, record):
+            self.calls.append(record)
+
+    try:
+        await js.publish(source_subject, b"not-a-protobuf-payload")
+        sub = await js.pull_subscribe(source_subject, durable=durable, stream="VITALS")
+        msg = (await sub.fetch(1, timeout=5))[0]
+        dlq_sub = await js.pull_subscribe(
+            DLQ_SUBJECT,
+            durable=dlq_durable,
+            stream="VITALS_DLQ",
+            config=ConsumerConfig(
+                deliver_policy=DeliverPolicy.NEW,
+                ack_policy=AckPolicy.EXPLICIT,
+            ),
+        )
+        writer = Writer()
+        await _process(msg, {"P-001": {"condition": "test", "copd_flag": False}}, {}, BatchScheduler(), writer, js)
+
+        dlq = (await dlq_sub.fetch(1, timeout=5))[0]
+        envelope = vitals_pb2.DeadLetterEnvelope()
+        envelope.ParseFromString(dlq.data)
+        assert envelope.original_payload == b"not-a-protobuf-payload"
+        assert envelope.source_subject == source_subject
+        assert writer.calls == []
+        await dlq.ack()
+    finally:
+        for name in (durable, dlq_durable):
+            try:
+                stream = "VITALS" if name == durable else "VITALS_DLQ"
+                await js.delete_consumer(stream, name)
+            except Exception:
+                pass
         await nc.close()

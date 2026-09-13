@@ -344,5 +344,8 @@ consolidated in [IMPLEMENTED.md](IMPLEMENTED.md). Accepted standards are recorde
 in [TELEMETRY_CONTRACT.md](TELEMETRY_CONTRACT.md). The evidence-backed security,
 privacy, reliability, testing, traceability, accountability, and disclosure
 case is summarized in [TRUST_AND_ASSURANCE.md](TRUST_AND_ASSURANCE.md).
+Benchmark execution, figure interpretation, and dissertation writing guidance
+are maintained in
+[DISSERTATION_EVIDENCE_ONBOARDING.md](DISSERTATION_EVIDENCE_ONBOARDING.md).
 Milestone and worker reports are intentionally not retained after their unique
 findings have been folded into these authorities.

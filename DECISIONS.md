@@ -5,7 +5,8 @@
 The maintained documentation set is limited to the workspace behavior
 contract, README, accepted decisions, consolidated implementation/decision
 status, remaining-work blueprint, operator guide, telemetry contract, trust and
-assurance case, and the governed evidence documentation.
+assurance case, dissertation evidence onboarding, and the governed evidence
+documentation.
 
 Milestone, worker, and point-in-time release reports are removed after their
 unique findings are incorporated into those authorities. Obsolete notebooks,

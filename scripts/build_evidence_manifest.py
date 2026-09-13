@@ -8,6 +8,7 @@ import csv
 import hashlib
 import importlib.metadata
 import json
+import mimetypes
 import os
 import platform
 import subprocess
@@ -136,15 +137,33 @@ def evidence_inventory(evidence_dir: Path) -> list[dict]:
         "benchmark_aggregate.csv": "derived_aggregate",
         "FIGURE_CAPTIONS.md": "figure_captions",
     }
+    generators = {
+        "experiment_runs.jsonl": "scripts/run_benchmark.py",
+        "benchmark_aggregate.csv": "scripts/aggregate_benchmark.py",
+        "live_latency.csv": "scripts/measure_live_latency.py",
+        "live_latency.json": "scripts/measure_live_latency.py",
+        "protocol_benchmark.csv": "scripts/benchmark_protocol.py",
+        "scale_T1.json": "scripts/run_scale_tier.py",
+        "scale_results.csv": "scripts/run_scale_tier.py",
+    }
     inventory = []
     for path in sorted(evidence_dir.rglob("*")):
         if not path.is_file() or path.name in {".gitkeep", "manifest.json", "SHA256SUMS"}:
             continue
         relative = path.relative_to(evidence_dir).as_posix()
         role = roles.get(relative, "figure" if relative.startswith("figures/") else "supporting_evidence")
+        if relative.startswith("figures/abc_"):
+            generated_by = "scripts/aggregate_benchmark.py"
+        elif relative.startswith("figures/"):
+            generated_by = "scripts/generate_evidence_status.py"
+        else:
+            generated_by = generators.get(relative, "maintained documentation")
         inventory.append({
             "path": f"evidence/{relative}",
             "role": role,
+            "media_type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            "size_bytes": path.stat().st_size,
+            "generated_by": generated_by,
             "sha256": file_sha256(path),
             "tracked": _is_tracked(path),
         })

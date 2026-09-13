@@ -236,6 +236,7 @@ The documentation set has been reduced to the following authorities:
 | `IMPLEMENTED.md` | Consolidated implementation status, historical results, pending decisions, and unfinished work |
 | `IMPLEMENTATION_BLUEPRINT.md` | Remaining ownership queues, sequencing, acceptance gates, and release plan |
 | `TRUST_AND_ASSURANCE.md` | Evidence-backed assurance claims, control mapping, disclosure policy, and limitations |
+| `DISSERTATION_EVIDENCE_ONBOARDING.md` | Benchmark execution, visualization interpretation, and dissertation writing guide |
 | `OPERATIONS_AND_REPRODUCIBILITY.md` | Canonical setup, operation, testing, maintenance, and final evidence procedure |
 | `TELEMETRY_CONTRACT.md` | Runtime telemetry, acknowledgement, privacy, retention, credential, and alert contract |
 | `evidence/README.md` | Evidence-bundle reproduction entry point |

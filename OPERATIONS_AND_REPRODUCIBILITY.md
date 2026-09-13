@@ -488,15 +488,16 @@ complete scoring and storage system.
 
 The path is operator-local and must not be persisted in portable manifests.
 Review every generated artifact for row-level leakage before adding it to the
-evidence bundle. The present KL direction differs from the local corpus target
-and must be corrected or relabeled before scientific use.
+evidence bundle. The implemented direction is explicitly
+`KL(P_synthetic || P_reference)`; source approval, transformation, bins, and
+smoothing must still be frozen before scientific use.
 
 ## Indexing and storage design
 
 ### Evidence index
 
-`evidence/manifest.json` must become the authoritative artifact index. For each
-file it should record:
+`evidence/manifest.json` is the authoritative artifact index. For each
+publishable file it records:
 
 - logical artifact ID and role (`input`, `raw_result`, `aggregate`, `figure`,
   `log`, or `provenance`);

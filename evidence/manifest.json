@@ -191,10 +191,10 @@
     ]
   },
   "code": {
-    "attestation_base_commit": "f08732253b5fd6088444a20cac1ddf59f82c1254",
+    "attestation_base_commit": "c1166cf07496085ad2d0cc883f67f976b3b903ec",
     "implementation_commit": "f08732253b5fd6088444a20cac1ddf59f82c1254",
     "note": "The implementation commit produced the run log; the attestation base may add evidence/ artifacts only.",
-    "worktree_dirty": true
+    "worktree_dirty": false
   },
   "commands": {
     "benchmark_aggregate": "python scripts/aggregate_benchmark.py --input benchmark_results.csv --output evidence/benchmark_aggregate.csv --figures-dir evidence/figures",
@@ -240,7 +240,7 @@
     "status": "unexecuted",
     "transformation_method": null
   },
-  "generated_at_utc": "2026-09-13T23:27:17.508548+00:00",
+  "generated_at_utc": "2026-09-13T23:27:26.825134+00:00",
   "live_experiments": {
     "benchmark_run_provenance": {
       "artifact": "evidence/experiment_runs.jsonl",
@@ -272,12 +272,10 @@
   "manifest_version": 4,
   "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
   "release": {
-    "blockers": [
-      "worktree is dirty"
-    ],
-    "eligible_for_final_release": false,
+    "blockers": [],
+    "eligible_for_final_release": true,
     "policy": "Development mode records blockers; final mode exits without overwriting the manifest when any blocker exists.",
-    "requested_mode": "development"
+    "requested_mode": "final"
   },
   "runtime": {
     "dependencies": [

@@ -17,7 +17,7 @@ hospital-scale readiness, or suitability for real patient data.
 
 | Lane | Ownership | Current result |
 | --- | --- | --- |
-| Worker 1 — Transport and schema | Protobuf, NATS, MQTT/Kafka transport behavior, Schema Registry, broker provisioning, acknowledgement and offset tests | Offline transport contracts and regressions are implemented. Final live broker, restart, fault, persistence, and parity evidence remains due. |
+| Worker 1 — Transport and schema | Protobuf, NATS, MQTT/Kafka transport behavior, Schema Registry, broker provisioning, acknowledgement and offset tests | Implementation is complete for the declared local scope. Offline and baseline live NATS/MQTT/Kafka/TLS/parity gates passed; only clean-final reruns and the broader restart/fault matrix remain execution work. |
 | Worker 2 — Experimental evidence | Benchmark design, estimands, aggregation, statistical evidence, scale/latency results, manifests and release artifacts | The corrected development matrix and evidence integrity controls are implemented. Crash-safe provenance, dependence-aware inference, reference validation, sensitivity analysis, scale T2–T4, and clean final reproduction remain due. |
 | Worker 3 — Telemetry, compliance and visualization | Runtime telemetry, durable outbox, Influx boundary, privacy-safe diagnostics, Grafana and dissertation-facing status views | Privacy-safe diagnostics, outbox tooling, and offline dashboard semantics are implemented. Source-message idempotency and terminal quarantine remain local implementation work; live Influx, Grafana, alert, credential, and retention gates remain unexecuted or decision-gated. |
 | Coordinator | Shared scoring semantics, architecture decisions, Registry integration, final release and claim approval | Completed work and decisions are maintained here; remaining work and fail-closed gates are maintained in `IMPLEMENTATION_BLUEPRINT.md`. |
@@ -90,17 +90,70 @@ hospital-scale readiness, or suitability for real patient data.
 - NATS and MQTT accept the canonical Protobuf vital-sign schema and perform
   structural validation before changing scoring state.
 - The encoded patient and signal must match the source subject.
-- Rejected NATS messages use a structured Protobuf dead-letter envelope and a
-  separate DLQ stream.
-- Kafka and Schema Registry are implemented as an isolated, opt-in comparison
-  path; they do not replace the NATS MVP.
+- NATS provisioning creates, reconciles, and verifies the file-backed `VITALS`
+  and `VITALS_DLQ` streams with 24-hour maximum age and the file-backed
+  `ALARMS` stream with seven-day maximum age. It also reconciles the `BRAIN`
+  and `LOCAL_SCORER` pull consumers to explicit acknowledgement, 30-second
+  `AckWait`, three maximum deliveries, and 500 maximum pending acknowledgements.
+- Provisioning is non-interactive, repeat-safe, propagates CLI/authentication
+  failures, validates the complete declared contracts, and works regardless of
+  the caller's working directory.
+- Rejected NATS messages use a structured Protobuf dead-letter envelope in the
+  separate `VITALS_DLQ` stream. Stable rejection IDs suppress repeated storage
+  of the same rejected payload within JetStream's duplicate window, and source
+  acknowledgement follows confirmed DLQ publication.
+- The live NATS test exercises the actual `_process` path and SQLite outbox,
+  proves valid records receive durable Approach A/C output before source ACK,
+  verifies malformed input reaches the current-run DLQ rather than retained
+  history, and verifies local scorer publication into `ALARMS`.
+- The local scorer waits for the `ALARMS` JetStream publish acknowledgement
+  before acknowledging its triggering vital. Its NEWS2 state remains
+  memory-only and no notification consumer or restart-continuity claim exists.
+- MQTT uses `vitals/{patient_id}/{signal_type}` with a bounded `vitals/#`
+  subscription and maps slash topics to the canonical dotted identity check.
+  Both normal publishing and invalid-message DLQ publication wait for QoS 1
+  PUBACK; invalid source input is manually acknowledged only after confirmed
+  publication to `dlq/vitals/mqtt`. PUBACK proves broker receipt, not durable
+  archive, and NATS/MQTT dual publication is not atomic.
+- Kafka and Schema Registry are implemented as an isolated, opt-in,
+  validation-only comparison path; they do not replace the NATS MVP or invoke
+  Brain scoring, the SQLite outbox, InfluxDB, or alarm emission.
 - Kafka runtime schema auto-registration is disabled, compatibility is
   `BACKWARD_TRANSITIVE`, and consumer offset commits occur only after the
   governed side effect or structured DLQ delivery.
+- Kafka provisioning verifies fixed topic names, partition counts, replication,
+  DLQ cleanup policy, and retention after every repeat-safe create. Unsupported
+  topic environment overrides fail rather than bypass the provisioned contract.
 - Kafka topic-description parsing now preserves comma-containing configuration
   values such as `cleanup.policy=compact,delete`. Regression coverage includes
   reordered, missing, and unexpected policies.
+- Kafka polling distinguishes an idle poll from a consumed poison record. The
+  parity runner requires confirmed delivery for its intentional poison payload,
+  ignores unrelated concurrent records when accounting for its run, and
+  reports valid acceptance separately from structured rejection.
 - Published development ports are Registry-owned and bound to loopback.
+
+### Transport infrastructure and security
+
+- Compose images for NATS, Mosquitto, Kafka, and Schema Registry are pinned by
+  digest. Insecure NATS uses a named persistent JetStream volume; all services
+  have health checks and published ports remain loopback-only.
+- `scripts/infrastructure_doctor.py` verifies required tools, the selected
+  profile's actual Compose ports against the root Registry, selected services,
+  image identities, and a secret-independent Compose configuration hash. It can
+  inspect without contacting the Docker daemon for its client version, or
+  explicitly start only the requested services and run live provisioning.
+- The doctor refuses to start a profile when its governed port has an
+  unidentified listener and refuses to overwrite an existing inventory unless
+  explicitly authorized.
+- `scripts/verify_secure_nats.py` generates disposable certificates and random
+  credentials, uses an isolated Compose project, proves authenticated TLS
+  access, rejects anonymous access, a wrong password, and an untrusted CA,
+  rechecks authenticated health between negative probes, applies process
+  timeouts, and removes its container and volume afterward.
+- Secure verification does not establish production mutual TLS, cipher policy,
+  multi-node durability, or hosted deployment. Those capabilities are outside
+  the declared local research scope.
 
 ### Durable telemetry and acknowledgement
 
@@ -394,24 +447,74 @@ release.
 add V2 only after the corresponding live gates pass, and make no V3/V4 claim
 without independent validation or a separately approved clinical study.
 
-## Work still not completed
+## Built capabilities that require additional runs
 
-The following are implementation or execution tasks, not evidence that can be
-inferred from the completed offline suite:
+The implementation below already exists. The remaining work is execution,
+approval, or final evidence generation; it must not be described as missing
+software, and prior partial/development runs must not be promoted to final
+evidence.
 
-- crash-safe append-and-flush provenance with interruption recovery;
-- frozen ADEMP/STRESS protocol and dependence-aware paired inference;
-- approved-reference validation and temporal comparison;
-- clean-final-commit live reruns plus restart, redelivery, persistence,
-  packet-loss, replay, DLQ-deduplication, and memory evidence;
-- publish-to-confirmed-storage and alarm-delivery latency;
-- scale tiers T2–T4 on approved hardware;
-- sensitivity analyses using predeclared ranges;
-- live traceability and outbox reconciliation for the final run;
-- rendered Grafana screenshots and synthetic alert receipt;
-- credential-rotation and retention confirmation;
-- tracked-secret/ignored-path scanning and clean-clone reproduction; and
-- suppression, unless D11 authorizes a separate safety phase.
+| Built capability | Evidence already available | Additional run or decision required |
+| --- | --- | --- |
+| Complete offline unit/integration suite | 207 passed; five broker-dependent tests skipped in the ordinary offline run | Repeat from the final clean commit in an exactly pinned environment; required live tests must run with `REQUIRE_*_INTEGRATION=true` |
+| NATS stream/consumer provisioning and drift verification | Repeated successfully; live valid-outbox, current-run DLQ, and `ALARMS` paths passed | Repeat against the final candidate and add the approved restart/redelivery/max-delivery advisory fault matrix before broader V2 reliability claims |
+| Disposable secure-NATS verifier | Authenticated TLS accepted; anonymous, wrong-password, and untrusted-CA probes rejected | Repeat from the final candidate; production mTLS/cipher policy remains excluded unless separately approved |
+| MQTT QoS 1 publisher, bounded consumer, and invalid-input DLQ ordering | Live invalid-message test passed PUBACK-before-source-ACK | Repeat from the final candidate; broker restart/persistence and durable MQTT DLQ archival are not established |
+| Kafka topic/schema provisioning, compatibility, commit ordering, and structured DLQ | Live schema round trip and valid/wrong-key/malformed/unknown-schema paths passed | Repeat from the final candidate and run approved broker/registry interruption, rebalance, redelivery, DLQ-failure, and persistence cases |
+| NATS/Kafka validation-only parity harness | Current run accepted 10/10 valid messages and rejected one intentional poison record on each transport | Repeat under a frozen run configuration; it remains wire/schema acceptance and latency evidence, not scoring/storage/outcome parity |
+| Deterministic A/B/C benchmark runner | Development artifacts contain 450 approach rows, 150 run records, and 86,400-second stable-baseline cells | Regenerate from the chosen clean commit after crash-safe provenance and the statistical contract are implemented and approved |
+| Aggregate tables, figures, development manifest, and checksums | Current development checksum bundle verifies | Regenerate and attest the complete bundle from the clean evidence baseline; current manifest still identifies an older dirty run |
+| Protocol benchmark | Throughput/latency artifact exists with restart-dependent dimensions explicitly skipped | Execute the restart, recovery, persistence, packet-loss, replay, and memory dimensions in an isolated authorized environment |
+| Live latency tool | Publish-to-consume artifact exists; storage was explicitly skipped | Run publish-to-successful-storage latency with final Influx configuration and reconciliation |
+| Scale-tier runner | T1 reached approximately 30 messages/second with no backlog; one T2 exploration exposed a producer bottleneck but is not accepted evidence | Freeze hardware/protocol and execute approved T2–T4 tiers or retain each as `unexecuted` |
+| Distribution-validation tool | Offline validation and provenance tests exist | Run only with an approved licensed external source and governed transformation; keep source rows outside Git |
+| Traceability and outbox-health auditors | Both aggregate, privacy-safe interfaces and offline tests exist | Execute on the final controlled outbox/Influx window and feed results into a combined reconciliation artifact |
+| Grafana dashboards and paused synthetic alert | Dashboard semantics are offline-tested and A/B/C labels now match their data sources | Remove hardcoded bucket defaults, add genuine onset-to-detection data, validate live queries/rendering, then exercise an owner-approved synthetic-only destination |
+| Evidence manifest final-mode guard | Dirty state, artifact shape, hashes, dependencies, and blockers are checked fail-closed | Resolve the two-stage implementation/evidence attestation workflow and run it from the final clean commits without overwriting inspectable development evidence |
 
-These items remain open even though their interfaces, status representation, or
-offline tests may already exist.
+The current `evidence/manifest.json` is therefore a development snapshot, not
+the status of the latest source tree: it records commit `f3b6169` with a dirty
+worktree. Its recorded environment was exact, while the currently reused
+`tcc_env` has `python-dotenv 1.2.3` instead of the pinned `1.0.1`. A fresh final
+environment and regenerated manifest are required even though `pip check`
+reports no broken dependency relationships.
+
+## Implementation still required before those runs can close
+
+These are genuine code or analysis gaps rather than merely unexecuted tools:
+
+- Worker 2: append-and-flush benchmark/run provenance with interruption
+  recovery; a frozen ADEMP/STRESS protocol; dependence-aware paired inference,
+  Monte Carlo error and non-detection handling; and predeclared sensitivity
+  analysis.
+- Worker 2: complete artifact-role/provenance indexing and a coherent
+  two-commit final evidence/attestation workflow.
+- Worker 3: stable source-message identity propagated through NATS/MQTT into
+  outbox keys, including crash/redelivery tests across threshold changes.
+- Worker 3: bounded terminal-failure classification, privacy-safe quarantine,
+  and operational advisories instead of indefinite retry.
+- Worker 3: one reconciliation result joining accepted broker inputs, outbox
+  pending/delivered state, and stored Influx counts.
+- Worker 3: governed dashboard/alert bucket configuration and a real
+  onset-to-detection Grafana view.
+- Coordinator: tracked-secret/ignored-path release scanning, final clean-clone
+  reproduction, and final maintained-document/evidence reconciliation.
+
+## Runs blocked on owner input or external resources
+
+- Approve the independent reference source, licence/DUA, and transformation
+  method before distribution/temporal validation.
+- Approve hardware, resource limits, duration, repetitions, and targets before
+  accepting T2–T4 capacity evidence.
+- Approve retention and deletion policy separately for NATS, MQTT, Kafka,
+  Influx, DLQ, logs, alarms, and aggregate evidence.
+- Confirm historical Influx token rotation and provide final Influx access for
+  storage latency, traceability, and reconciliation. Record no secret value.
+- Approve a synthetic-only Grafana notification destination, recipients,
+  activation window, evidence, and teardown before unpausing the alert.
+- Keep suppression outside scope unless D11 authorizes a separate safety design.
+
+Until these implementation, run, and owner gates close, the supported ceiling
+is V0/V1 for the corresponding offline results plus the narrowly scoped V2
+transport checks explicitly recorded above. No V3 realism or V4 clinical claim
+is established.

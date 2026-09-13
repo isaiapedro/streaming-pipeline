@@ -304,7 +304,7 @@ The test strategy uses several layers:
 | Dashboard tests | Datasource identity, TLS verification, filters, A/B/C query semantics, paused alert default |
 | Optional live tests | NATS valid/DLQ/ALARMS, MQTT PUBACK/DLQ, Kafka schema/DLQ, secure TLS, parity |
 
-The latest recorded offline gate passed 210 tests with five optional live tests
+The latest recorded offline gate passed 211 tests with five optional live tests
 skipped. Those skips mean “not executed in this offline command,” not “passed.”
 Separate live checks passed the NATS valid/DLQ/ALARMS paths, MQTT invalid-DLQ
 ordering, Kafka schema/DLQ paths, secure NATS positive/negative probes, and a

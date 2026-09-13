@@ -1,9 +1,12 @@
 # Grafana provisioning
 
-`comparison.json` provides synchronized A/B/C NEWS2, alarm timing/rate, and
-version views with patient, scenario, and approach filters. The dashboard reads
-runtime telemetry from InfluxDB; dissertation aggregate figures remain under
-`evidence/` and are not misrepresented as live measurements.
+`comparison.json` provides synchronized A/B/C alarm-state/observation views,
+B/C-only NEWS2 scores, and version views with patient, scenario, and approach
+filters. Approach A has no NEWS2 value, so the dashboard unions its
+`patient_vitals` alarm state only where an A/B/C comparison is valid. The
+observation panel is deliberately not called an episode rate. The dashboard
+reads runtime telemetry from InfluxDB; dissertation aggregate figures remain
+under `evidence/` and are not misrepresented as live measurements.
 
 Validate the assets without contacting Grafana:
 

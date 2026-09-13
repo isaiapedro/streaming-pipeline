@@ -29,8 +29,8 @@ def _architecture_figure(path: Path) -> None:
         "Validated A/B/C +\nlocal NEWS2 scoring": (0.47, 0.62, "implemented"),
         "SQLite WAL\ndurable outbox": (0.70, 0.62, "implemented"),
         "Local alarm\npublish": (0.70, 0.84, "implemented"),
-        "Influx confirmed\ncloud persistence": (0.87, 0.62, "unverified"),
-        "Grafana live render\n+ notification": (0.87, 0.34, "unverified"),
+        "Influx confirmed\ncloud persistence": (0.82, 0.62, "unverified"),
+        "Grafana live render\n+ notification": (0.82, 0.34, "unverified"),
         "Cloud suppression\nfeedback": (0.47, 0.12, "future"),
         "T2–T4 scale\nevidence": (0.24, 0.12, "unverified"),
         "Kafka + Schema Registry\nisolated comparison": (0.24, 0.36, "supplemental"),
@@ -50,7 +50,7 @@ def _architecture_figure(path: Path) -> None:
         centres[label] = (x + width / 2, y + height / 2)
 
     def arrow(source: str, target: str, dashed: bool = False) -> None:
-        axis.annotate("", xy=centres[target], xytext=centres[source], arrowprops={"arrowstyle": "->", "color": "#555555", "linestyle": "--" if dashed else "-", "linewidth": 1.4})
+        axis.annotate("", xy=centres[target], xytext=centres[source], arrowprops={"arrowstyle": "->", "color": "#555555", "linestyle": "--" if dashed else "-", "linewidth": 1.4, "shrinkA": 45, "shrinkB": 45})
 
     arrow("Synthetic\ngenerators", "NATS + canonical\nProtobuf ingress")
     arrow("NATS + canonical\nProtobuf ingress", "Validated A/B/C +\nlocal NEWS2 scoring")
@@ -59,7 +59,9 @@ def _architecture_figure(path: Path) -> None:
     arrow("SQLite WAL\ndurable outbox", "Influx confirmed\ncloud persistence", True)
     arrow("Influx confirmed\ncloud persistence", "Grafana live render\n+ notification", True)
     arrow("Synthetic\ngenerators", "Kafka + Schema Registry\nisolated comparison")
-    arrow("Grafana live render\n+ notification", "Cloud suppression\nfeedback", True)
+    arrow("NATS + canonical\nProtobuf ingress", "T2–T4 scale\nevidence", True)
+    arrow("Influx confirmed\ncloud persistence", "Cloud suppression\nfeedback", True)
+    arrow("Cloud suppression\nfeedback", "Local alarm\npublish", True)
     axis.text(0.02, 0.97, "Demonstrated and planned architecture", fontsize=16, fontweight="bold", va="top")
     axis.text(0.02, 0.91, "Solid green: implemented core · solid blue: isolated supplemental path · dashed grey: unverified · dashed magenta: future", fontsize=9, va="top")
     fig.savefig(path, dpi=200)
@@ -68,6 +70,8 @@ def _architecture_figure(path: Path) -> None:
 
 def main() -> None:
     manifest = json.loads((ROOT / "evidence/manifest.json").read_text())
+    controls = manifest.get("compliance_controls", {})
+    traceability = manifest["live_experiments"].get("stored_traceability_audit", {"status": "unexecuted"})
     rows = [
         ("A/B/C scoring benchmark", "executed"),
         ("NATS/MQTT latency", manifest["live_experiments"]["protocol"]["status"]),
@@ -76,12 +80,24 @@ def main() -> None:
         ("Synthetic/reference distribution", manifest["distribution_reference"]["status"]),
         ("Scale T1", manifest["scale_tiers"][0]["status"]),
         ("Scale T2–T4", "unexecuted"),
+        ("Stored traceability coverage", traceability["status"]),
+        ("Grafana configuration", "offline_tested"),
+        ("Grafana live render", controls.get("dashboard_semantic_validation", {}).get("live_render", "unexecuted")),
+        ("Alert notification delivery", controls.get("alert_delivery", {}).get("status", "unexecuted")),
+        ("Credential rotation", controls.get("credential_rotation", {}).get("status", "owner_confirmation_pending")),
+        ("Retention approval", controls.get("retention_policy", {}).get("status", "owner_approval_pending")),
         ("Suppression round trip", "unimplemented"),
     ]
-    colors = {"executed": "#009E73", "executed_partial": "#E69F00", "unexecuted": "#999999", "unimplemented": "#CC79A7"}
-    fig, axis = plt.subplots(figsize=(10, 5), constrained_layout=True)
+    colors = {
+        "executed": "#009E73", "passed": "#009E73", "offline_tested": "#E69F00",
+        "executed_partial": "#E69F00", "incomplete": "#D55E00", "no_records": "#999999",
+        "unexecuted": "#999999", "unimplemented": "#CC79A7",
+        "owner_confirmation_pending": "#CC79A7", "owner_approval_pending": "#CC79A7",
+        "invalid": "#D55E00",
+    }
+    fig, axis = plt.subplots(figsize=(10, 8), constrained_layout=True)
     y = list(range(len(rows)))
-    axis.barh(y, [1] * len(rows), color=[colors[status] for _, status in rows])
+    axis.barh(y, [1] * len(rows), color=[colors.get(status, "#D55E00") for _, status in rows])
     axis.set_yticks(y, [label for label, _ in rows])
     axis.set_xlim(0, 1)
     axis.set_xticks([])
@@ -128,9 +144,10 @@ def main() -> None:
     fig.savefig(scale_output, dpi=200)
     plt.close(fig)
 
-    tags = ["schema version", "pipeline version", "threshold version", "scoring approach", "scenario", "transport"]
+    tags = ["patient context", "schema version", "pipeline version", "threshold version", "scoring approach", "scenario", "transport"]
     columns = ["implemented", "unit-tested", "live stored audit"]
-    values = [[2, 2, 0] for _ in tags]
+    live_value = 2 if traceability["status"] == "passed" else 0
+    values = [[2, 2, live_value] for _ in tags]
     fig, axis = plt.subplots(figsize=(8, 4.5), constrained_layout=True)
     axis.imshow(values, aspect="auto", cmap=ListedColormap(["#999999", "#E69F00", "#009E73"]), vmin=0, vmax=2)
     axis.set_xticks(range(len(columns)), columns)

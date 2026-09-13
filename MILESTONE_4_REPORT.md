@@ -75,7 +75,7 @@ Observed results:
 - Final offline Kafka/schema/parity selection: 20 passed and 1 live test
   skipped while the brokers were intentionally stopped.
 - After the parallel lanes reconciled their temporary interface drift, the
-  complete repository suite passed with 185 tests and 3 optional-infrastructure
+  complete repository suite passed with 196 tests and 3 optional-infrastructure
   skips.
 
 ## Known limitations

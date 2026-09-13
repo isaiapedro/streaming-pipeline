@@ -20,7 +20,7 @@
 
 | Gate | Result |
 | --- | --- |
-| Full offline pytest | 185 passed, 3 optional-infrastructure skips |
+| Full isolated-environment pytest | 196 passed, 3 optional-infrastructure skips |
 | Installed dependency integrity | `pip check` passed |
 | Compose render | Passed |
 | Registry validation | Passed, 42 components |
@@ -33,6 +33,18 @@
 | Secure NATS integration | 2 passed |
 | Secure NATS wrong-password test | Rejected as required |
 | Current-source secret scan | No embedded private key or literal application credential found; ignored `.env` excluded by design |
+
+The first isolated dependency install failed closed because the original
+`pytest==8.3.4` pin was incompatible with `pytest-asyncio==1.4.0`, whose
+declared lower bound is pytest 8.4. The baseline was tested with pytest 9.1.1;
+the direct pin was corrected to 9.1.1 and the isolated environment rebuilt
+before evidence regeneration.
+
+The first isolated test run also rejected a valid Kafka topic description:
+the contract parser did not distinguish a comma inside the value
+`cleanup.policy=compact,delete` from the separator before the next key. The
+parser now recognizes key boundaries explicitly and retains the negative drift
+test for `retention.ms`.
 
 The live NATS gate found that `nats consumer edit` still requested confirmation
 when repairing an existing `MaxAckPending` drift in a non-terminal session.

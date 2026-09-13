@@ -10,6 +10,7 @@ from brain.approaches import BatchScheduler
 from brain.influx_writer import InfluxWriter, VitalRecord, _safe_error_code
 from brain.main import _process as process_nats
 from scripts.audit_traceability import REQUIRED_TAGS, _csv_rows, audit_rows
+from scripts.audit_outbox import audit_outbox
 from schema import vitals_pb2
 
 ROOT = Path(__file__).parents[2]
@@ -82,6 +83,50 @@ async def test_outbox_persists_only_a_safe_error_code(tmp_path, caplog):
     assert "P-SECRET" not in caplog.text
     assert "123.456" not in caplog.text
     writer._db.close()
+
+
+@pytest.mark.asyncio
+async def test_outbox_health_is_read_only_aggregate_and_private(tmp_path):
+    path = tmp_path / "private" / "outbox.sqlite3"
+    writer = InfluxWriter(outbox_path=path)
+    writer._open_outbox()
+    await writer.enqueue(VitalRecord(
+        patient_id="P-SECRET", signal_type="heart_rate", condition="synthetic",
+        alarm_level="ok", value=123.456, timestamp_ms=1_800_000_000_000,
+        schema_version="1", pipeline_version="test", threshold_version="thresholds",
+    ))
+    writer._db.close()
+    writer._db = None
+
+    result = audit_outbox(path, now_ms=1_800_000_010_000)
+    assert result["integrity"] == "ok"
+    assert result["pending_records"] == 1
+    assert result["private_file_mode"]
+    encoded = json.dumps(result)
+    assert "P-SECRET" not in encoded
+    assert "123.456" not in encoded
+    assert str(path) not in encoded
+
+
+@pytest.mark.asyncio
+async def test_outbox_open_scrubs_legacy_free_text_errors(tmp_path):
+    path = tmp_path / "outbox.sqlite3"
+    writer = InfluxWriter(outbox_path=path)
+    writer._open_outbox()
+    await writer.enqueue(VitalRecord(
+        patient_id="P-SECRET", signal_type="heart_rate", condition="synthetic",
+        alarm_level="ok", value=80, timestamp_ms=1_800_000_000_000,
+        schema_version="1", pipeline_version="test", threshold_version="thresholds",
+    ))
+    writer._db.execute("UPDATE outbox SET last_error=?", ("token=legacy-secret https://private.example",))
+    writer._db.commit()
+    writer._db.close()
+    writer._db = None
+
+    restarted = InfluxWriter(outbox_path=path)
+    restarted._open_outbox()
+    assert restarted._db.execute("SELECT last_error FROM outbox").fetchone()[0] == "LegacyErrorRedacted"
+    restarted._db.close()
 
 
 @pytest.mark.asyncio

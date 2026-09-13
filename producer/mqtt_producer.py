@@ -1,9 +1,9 @@
 """MQTT publisher used to dual-publish the same vital-sign stream that goes
 to NATS, for the NATS-vs-MQTT protocol comparison (plan-detailed.md L2).
 
-paho-mqtt is callback/thread based, not asyncio-native — `loop_start()` runs
-its network loop on a background thread; `publish()` itself is a fast
-non-blocking enqueue, safe to call from the asyncio event loop directly.
+paho-mqtt is callback/thread based, not asyncio-native. `loop_start()` runs
+its network loop on a background thread and `publish()` waits for the QoS
+acknowledgement so enqueue success is never mistaken for broker acceptance.
 """
 
 import logging

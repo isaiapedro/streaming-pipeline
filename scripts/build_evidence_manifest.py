@@ -225,6 +225,14 @@ def build_manifest(
             scale_by_tier = {row["tier"]: row for row in csv.DictReader(handle)}
     protocol_path = ROOT / "evidence" / "protocol_benchmark.csv"
     latency_path = ROOT / "evidence" / "live_latency.json"
+    traceability_path = ROOT / "evidence" / "traceability_audit.json"
+    outbox_health_path = ROOT / "evidence" / "outbox_health.json"
+    traceability_status = "unexecuted"
+    if traceability_path.exists():
+        try:
+            traceability_status = json.loads(traceability_path.read_text()).get("status", "invalid")
+        except (OSError, json.JSONDecodeError):
+            traceability_status = "invalid"
     return {
         "manifest_version": 3,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -307,6 +315,23 @@ def build_manifest(
                 "records_expected": 150,
                 "contains_raw_vitals": False,
             },
+            "stored_traceability_audit": {
+                "status": traceability_status,
+                "artifact": "evidence/traceability_audit.json" if traceability_path.exists() else None,
+                "privacy": "aggregate tag-presence counts only",
+            },
+            "outbox_health_audit": {
+                "status": "executed" if outbox_health_path.exists() else "unexecuted",
+                "artifact": "evidence/outbox_health.json" if outbox_health_path.exists() else None,
+                "privacy": "aggregate SQLite health only",
+            },
+        },
+        "compliance_controls": {
+            "runtime_log_redaction": {"status": "implemented_and_tested", "test": "brain/tests/test_compliance_tools.py"},
+            "dashboard_semantic_validation": {"status": "offline_tested", "live_render": "unexecuted"},
+            "alert_delivery": {"status": "unexecuted", "reason": "approved destination required"},
+            "credential_rotation": {"status": "owner_confirmation_pending"},
+            "retention_policy": {"status": "owner_approval_pending"},
         },
         "distribution_reference": {
             "approved_source_id": reference_source_id,
@@ -327,6 +352,9 @@ def build_manifest(
             "final_manifest": "python3 scripts/build_evidence_manifest.py --mode final",
             "checksums": "python3 scripts/build_evidence_manifest.py --checksum-only",
             "evidence_status_figure": "MPLCONFIGDIR=/tmp/matplotlib-academic python3 scripts/generate_evidence_status.py",
+            "traceability_audit_export": "python3 scripts/audit_traceability.py --input-csv /approved/export.csv --output evidence/traceability_audit.json --require-complete",
+            "traceability_audit_live": "python3 scripts/audit_traceability.py --live --range 1h --output evidence/traceability_audit.json --require-complete",
+            "outbox_health": "python3 scripts/audit_outbox.py --database .runtime/influx_outbox.sqlite3 --output evidence/outbox_health.json --require-healthy",
             "tests": "python3 -m pytest -q",
         },
     }

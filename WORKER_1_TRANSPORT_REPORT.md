@@ -74,7 +74,7 @@ without changing the NATS MVP entry points.
 | Required live Kafka integration | 1 passed twice; valid commit and wrong-key, malformed-frame, unknown-schema DLQ paths |
 | Live NATS/Kafka parity harness | 20/20 then 10/10 accepted on each transport; JSON/CSV; cleanup verified |
 | Final offline Kafka/schema/parity selection | 20 passed, 1 live skip |
-| Complete integrated repository suite after all worker remediation | 185 passed, 3 skipped |
+| Complete integrated repository suite after final audit additions | 196 passed, 3 skipped |
 
 The temporary insecure and secure NATS containers were left stopped after the
 verification runs. Certificates, credentials, broker data, and benchmark

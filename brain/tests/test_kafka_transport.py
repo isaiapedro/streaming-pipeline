@@ -7,6 +7,7 @@ from confluent_kafka.schema_registry.error import SchemaRegistryError
 
 from brain.validation import ValidationError, ValidVital
 from kafka_path.settings import KafkaSettings
+from kafka_path.topic_contracts import DLQ_TOPIC, VITALS_TOPIC
 from kafka_path.transport import KafkaCodec, KafkaVitalConsumer, KafkaVitalProducer
 from schema import vitals_pb2
 
@@ -342,3 +343,25 @@ def test_kafka_handler_must_finish_synchronously_before_commit():
     with pytest.raises(TypeError, match="synchronous handler"):
         consumer.process_record(FakeMessage(b"encoded-vital"), asynchronous_handler)
     assert raw_consumer.commits == []
+
+
+def test_kafka_topic_contracts_accept_expected_descriptions():
+    VITALS_TOPIC.assert_describe(
+        "Topic: vitals.protobuf.v1 PartitionCount: 3 ReplicationFactor: 1 Configs: "
+    )
+    DLQ_TOPIC.assert_describe(
+        "Topic: vitals.dlq.protobuf.v1 PartitionCount: 1 ReplicationFactor: 1 "
+        "Configs: cleanup.policy=compact,delete,retention.ms=86400000"
+    )
+
+
+def test_kafka_topic_contract_rejects_partition_or_config_drift():
+    with pytest.raises(RuntimeError, match="partitions must equal 3"):
+        VITALS_TOPIC.assert_describe(
+            "Topic: vitals.protobuf.v1 PartitionCount: 1 ReplicationFactor: 1 Configs: "
+        )
+    with pytest.raises(RuntimeError, match="retention.ms must equal 86400000"):
+        DLQ_TOPIC.assert_describe(
+            "Topic: vitals.dlq.protobuf.v1 PartitionCount: 1 ReplicationFactor: 1 "
+            "Configs: cleanup.policy=compact,delete,retention.ms=1234"
+        )

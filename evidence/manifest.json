@@ -22,7 +22,8 @@
         "sha256": "ab0a4d1a21eee6a20593a44ba88492ed90d46a6724506c5a1563a1a830bdf4cb"
       },
       "validation_errors": [
-        "run log was generated from a dirty or unknown worktree"
+        "run log was generated from a dirty or unknown worktree",
+        "run log commit does not match the manifest commit"
       ],
       "validation_status": "development_only"
     },
@@ -84,7 +85,7 @@
     ]
   },
   "code": {
-    "commit": "f08def23286d92918a085f2a7d9742a6b3bf1176",
+    "commit": "7fa9cbe821fbf495caea1eb6755dabba7e329f6e",
     "note": "Final measurements must be rerun after the worktree is clean when worktree_dirty is true.",
     "worktree_dirty": true
   },
@@ -97,9 +98,32 @@
     "evidence_status_figure": "MPLCONFIGDIR=/tmp/matplotlib-academic python3 scripts/generate_evidence_status.py",
     "final_manifest": "python3 scripts/build_evidence_manifest.py --mode final",
     "live_latency": "python scripts/measure_live_latency.py --count 100 --skip-storage --csv-out evidence/live_latency.csv --json-out evidence/live_latency.json",
+    "outbox_health": "python3 scripts/audit_outbox.py --database .runtime/influx_outbox.sqlite3 --output evidence/outbox_health.json --require-healthy",
     "protocol": "python scripts/benchmark_protocol.py --n 100 --out evidence/protocol_benchmark.csv --skip-restarts",
     "scale_tier": "python scripts/run_scale_tier.py --tier T1 --duration 10 --pull-timeout 0.1 --nats-url nats://localhost:4222 --csv-out evidence/scale_results.csv --json-out evidence/scale_T1.json",
-    "tests": "python3 -m pytest -q"
+    "tests": "python3 -m pytest -q",
+    "traceability_audit_export": "python3 scripts/audit_traceability.py --input-csv /approved/export.csv --output evidence/traceability_audit.json --require-complete",
+    "traceability_audit_live": "python3 scripts/audit_traceability.py --live --range 1h --output evidence/traceability_audit.json --require-complete"
+  },
+  "compliance_controls": {
+    "alert_delivery": {
+      "reason": "approved destination required",
+      "status": "unexecuted"
+    },
+    "credential_rotation": {
+      "status": "owner_confirmation_pending"
+    },
+    "dashboard_semantic_validation": {
+      "live_render": "unexecuted",
+      "status": "offline_tested"
+    },
+    "retention_policy": {
+      "status": "owner_approval_pending"
+    },
+    "runtime_log_redaction": {
+      "status": "implemented_and_tested",
+      "test": "brain/tests/test_compliance_tools.py"
+    }
   },
   "distribution_reference": {
     "approved_source_id": null,
@@ -109,13 +133,18 @@
     "status": "unexecuted",
     "transformation_method": null
   },
-  "generated_at_utc": "2026-09-13T22:30:09.883932+00:00",
+  "generated_at_utc": "2026-09-13T22:49:32.939386+00:00",
   "live_experiments": {
     "benchmark_run_provenance": {
       "artifact": "evidence/experiment_runs.jsonl",
       "contains_raw_vitals": false,
       "records_expected": 150,
       "status": "executed"
+    },
+    "outbox_health_audit": {
+      "artifact": null,
+      "privacy": "aggregate SQLite health only",
+      "status": "unexecuted"
     },
     "pipeline_latency": {
       "artifact": "evidence/live_latency.json",
@@ -126,6 +155,11 @@
       "artifact": "evidence/protocol_benchmark.csv",
       "restart_dependent_dimensions": "unavailable (--skip-restarts)",
       "status": "executed_partial"
+    },
+    "stored_traceability_audit": {
+      "artifact": null,
+      "privacy": "aggregate tag-presence counts only",
+      "status": "unexecuted"
     }
   },
   "manifest_version": 3,
@@ -133,6 +167,7 @@
   "release": {
     "blockers": [
       "run log was generated from a dirty or unknown worktree",
+      "run log commit does not match the manifest commit",
       "worktree is dirty",
       "installed environment does not exactly match every pinned requirement"
     ],
@@ -311,11 +346,11 @@
         "status": "exact"
       },
       {
-        "expected_version": "8.3.4",
+        "expected_version": "9.1.1",
         "installed_version": "9.1.1",
         "package": "pytest",
-        "requirement": "pytest==8.3.4",
-        "status": "mismatch"
+        "requirement": "pytest==9.1.1",
+        "status": "exact"
       },
       {
         "expected_version": "1.4.0",
@@ -382,9 +417,8 @@
       }
     ],
     "dependency_validation": {
-      "issue_count": 2,
+      "issue_count": 1,
       "issues": [
-        "pytest==8.3.4",
         "python-dotenv==1.0.1"
       ],
       "status": "mismatch"
@@ -398,7 +432,7 @@
       "python_version": "3.13.5"
     },
     "python": "3.13.5",
-    "requirements_sha256": "baf6d26c6fd47337e7874e5707fc140a1057eae01e731b25ab061e8817689031"
+    "requirements_sha256": "85c4e502d7260068d6e1899e7130bef45384c281e29a5bcf08dc5368672abc1c"
   },
   "scale_tiers": [
     {

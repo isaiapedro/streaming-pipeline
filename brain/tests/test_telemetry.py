@@ -298,12 +298,32 @@ def test_grafana_assets_have_filters_versions_and_safe_alert(tmp_path):
         "patient", "scenario", "approach"
     }
     titles = {panel["title"] for panel in dashboard["panels"]}
-    assert {"NEWS2 score by approach", "Alarm timing by approach", "Telemetry versions"} <= titles
-    all_queries = "\n".join(
-        target.get("query", "") for panel in dashboard["panels"] for target in panel.get("targets", [])
-    )
+    assert {
+        "NEWS2 score — Approaches B/C only",
+        "Alarm timing by approach",
+        "Alarming observations per minute by approach",
+        "Telemetry versions",
+    } <= titles
+    queries = [target.get("query", "") for panel in dashboard["panels"] for target in panel.get("targets", [])]
+    all_queries = "\n".join(queries)
+    assert all("v.timeRangeStart" in query and "v.timeRangeStop" in query for query in queries)
+    assert all("${patient:regex}" in query and "${scenario:regex}" in query and "${approach:regex}" in query for query in queries)
     assert "schema_version" in all_queries
     assert "threshold_version" in all_queries
+    timing = next(panel for panel in dashboard["panels"] if panel["title"] == "Alarm timing by approach")
+    volume = next(panel for panel in dashboard["panels"] if panel["title"].startswith("Alarming observations"))
+    for panel in (timing, volume):
+        query = panel["targets"][0]["query"]
+        assert 'r._measurement == "patient_vitals"' in query
+        assert 'r.scoring_approach == "A"' in query
+        assert "union(tables: [a, bc])" in query
     rules = (root / "grafana/provisioning/alerting/rules.yml").read_text()
     assert "isPaused: true" in rules
     assert "INFLUX_TOKEN" not in rules
+    assert "data_class: synthetic" in rules
+    assert 'r.scenario_id != "none"' in rules
+    datasource = (root / "grafana/provisioning/datasources/influxdb.yml").read_text()
+    assert "uid: influxdb-cloud" in datasource
+    assert "${INFLUX_URL}" in datasource and "${INFLUX_TOKEN}" in datasource
+    assert "tlsSkipVerify: false" in datasource
+    assert "http://" not in datasource and "https://" not in datasource

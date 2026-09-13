@@ -67,6 +67,44 @@ values are proposals until the owner approves them. Before a hosted run, the
 operator must verify the actual bucket policies match the approved values and
 record only non-secret confirmation evidence.
 
+Broker retention is a separate operational layer from InfluxDB retention. The
+current local provisioning declares:
+
+| Broker artifact | Active local retention | Dissertation status |
+| --- | ---: | --- |
+| NATS `VITALS` | 24 hours | Implemented local buffer policy |
+| NATS `VITALS_DLQ` | 24 hours | Implemented, but differs from the proposed seven-day DLQ review period |
+| NATS `ALARMS` | 7 days | Implemented broker replay policy; not the proposed 180-day Influx alarm archive |
+| Kafka vital topic | Broker default | Local comparison only; owner policy not approved |
+| Kafka DLQ topic | 24 hours | Implemented, but differs from the proposed seven-day DLQ review period |
+
+The one-day versus seven-day DLQ mismatch is intentionally unresolved pending
+an owner privacy/triage decision. Do not silently lengthen retention: approval
+must specify operational need, storage layer, deletion verification, and who
+may inspect rejected payloads.
+
+## Privacy-safe verification commands
+
+Stored telemetry tag coverage can be audited from an operator-provided Influx
+CSV export without retaining any tag values:
+
+```bash
+python3 scripts/audit_traceability.py --input-csv /approved/export.csv \
+  --output evidence/traceability_audit.json --require-complete
+```
+
+An explicitly authorized live audit uses `--live --range 1h`. Local durable
+handoff health can be summarized without payloads, identifiers, paths, or
+exception text:
+
+```bash
+python3 scripts/audit_outbox.py --database .runtime/influx_outbox.sqlite3 \
+  --output evidence/outbox_health.json --require-healthy
+```
+
+Neither command establishes successful storage unless it is executed against
+the final clean-run artifacts and reconciled to accepted broker inputs.
+
 ## Credential status
 
 The source no longer contains a fallback InfluxDB credential, and `.env` plus

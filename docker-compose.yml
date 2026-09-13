@@ -1,6 +1,6 @@
 services:
   nats:
-    image: nats:2.10-alpine
+    image: nats@sha256:b83efabe3e7def1e0a4a31ec6e078999bb17c80363f881df35edc70fcb6bb927
     command: ["-js", "-sd", "/data/jetstream", "-m", "8222"]
     ports:
       - "127.0.0.1:4222:4222"   # local-only client
@@ -15,7 +15,7 @@ services:
       start_period: 5s
     restart: unless-stopped
   nats-secure:
-    image: nats:2.10-alpine
+    image: nats@sha256:b83efabe3e7def1e0a4a31ec6e078999bb17c80363f881df35edc70fcb6bb927
     profiles: ["secure"]
     command: ["-c", "/etc/nats/nats-server.conf"]
     environment:
@@ -33,17 +33,17 @@ services:
       - "127.0.0.1:8222:8222"
     volumes:
       - ./nats/nats-server.conf:/etc/nats/nats-server.conf:ro
-      - ./nats/certs:/etc/nats/certs:ro
+      - ${NATS_CERT_DIR:-./nats/certs}:/etc/nats/certs:ro
       - nats_secure_data:/data/jetstream
     healthcheck:
-      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "-", "http://localhost:8222/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
       interval: 5s
       timeout: 3s
       retries: 12
       start_period: 5s
     restart: "no"
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto@sha256:6f8d8a947c506f8a2290ec65cd4bd2bc7cb4d43fb5f6271f861cb013e2ef9797
     ports:
       - "127.0.0.1:1883:1883"   # local-only client
     volumes:
@@ -57,7 +57,7 @@ services:
       start_period: 5s
     restart: unless-stopped
   kafka:
-    image: confluentinc/cp-kafka:8.3.1
+    image: confluentinc/cp-kafka@sha256:0ad069035863aa1b090f4d9af47bfd2c08dc32864f3575d7d8579e3155c2586d
     profiles: ["kafka"]
     environment:
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
@@ -86,7 +86,7 @@ services:
       start_period: 30s
     restart: unless-stopped
   schema-registry:
-    image: confluentinc/cp-schema-registry:8.3.1
+    image: confluentinc/cp-schema-registry@sha256:f0cfd047a839c1ace54d93b92e3459f0d03dc3b5c9db1192a2246fd79b4f44c4
     profiles: ["kafka"]
     depends_on:
       kafka:

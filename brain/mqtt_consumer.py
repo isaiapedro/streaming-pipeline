@@ -5,16 +5,10 @@ Second consumer mode for the NATS-vs-MQTT protocol comparison
 exact same per-signal (Approach A) + composite NEWS2 (Approach C) scoring
 as `brain/main.py`'s NATS consumer — only the transport differs.
 
-Topic note: the producer publishes using the same literal string as the
-NATS subject (`vitals.{patient_id}.{signal_type}`, dot-separated) rather
-than translating it to MQTT's `/`-delimited hierarchy, so a topic-level
-wildcard subscribe (`vitals.+`) would not match — MQTT's `+`/`#` operate on
-`/` boundaries, and there are none in this topic string. This consumer
-subscribes to `#` (everything on the broker) instead. Acceptable for this
-closed single-purpose demo broker; a real MQTT deployment would use
-`vitals/{patient_id}/{signal_type}` topics and a proper `vitals/#` filter —
-noted here rather than silently done, since it's a real difference from
-the NATS subject convention.
+MQTT topics use the bounded `vitals/{patient_id}/{signal_type}` hierarchy.
+QoS 1 messages are manually acknowledged only after a durable local outbox
+handoff, or after a malformed payload has received a confirmed publish to the
+separate `dlq/vitals/mqtt` topic.
 """
 
 import asyncio

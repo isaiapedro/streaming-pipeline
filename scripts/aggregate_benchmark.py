@@ -260,6 +260,8 @@ def _timeline(path: Path) -> None:
         starts = [episode.start_ms for episode in tracker.finalize(duration_ms) if episode.start_ms >= scenario.onset_offset_ms]
         if starts:
             score_axis.axvline(starts[0] / 1_000, color=COLORS[approach], linestyle=":", linewidth=1.8, label=f"Approach {approach} first new episode")
+        else:
+            score_axis.plot([], [], color=COLORS[approach], linestyle=":", linewidth=1.8, label=f"Approach {approach}: no new post-onset episode")
 
     score_axis.axvline(scenario.onset_offset_ms / 1_000, linestyle="--", color="black", linewidth=1, label="ground-truth onset")
     score_axis.grid(alpha=0.2)

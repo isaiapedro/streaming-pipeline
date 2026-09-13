@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import time
 from dataclasses import asdict, dataclass
@@ -29,6 +30,7 @@ from config.settings import (
 )
 
 log = logging.getLogger(__name__)
+_SAFE_ERROR_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?::status=[0-9]{3})?$")
 
 
 def _safe_error_code(error: Exception) -> str:
@@ -269,6 +271,20 @@ class InfluxWriter:
                 last_error TEXT
             )"""
         )
+        # Earlier builds stored arbitrary exception text. Scrub legacy rows on
+        # open so endpoints, query text, or credentials cannot survive locally.
+        unsafe_error_ids = [
+            row_id for row_id, error in self._db.execute(
+                "SELECT id, last_error FROM outbox WHERE last_error IS NOT NULL"
+            ).fetchall()
+            if not _SAFE_ERROR_PATTERN.fullmatch(error)
+        ]
+        if unsafe_error_ids:
+            with self._db:
+                self._db.executemany(
+                    "UPDATE outbox SET last_error='LegacyErrorRedacted' WHERE id=?",
+                    [(row_id,) for row_id in unsafe_error_ids],
+                )
         self._db.commit()
         integrity = self._db.execute("PRAGMA quick_check").fetchone()[0]
         if integrity != "ok":

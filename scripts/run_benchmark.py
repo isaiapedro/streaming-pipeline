@@ -125,7 +125,11 @@ def _simulate_run(
                 continue
 
             if record is not None:
-                values = noisy_value if isinstance(noisy_value, dict) else {signal_type: noisy_value}
+                values = (
+                    {"systolic_bp": noisy_value["systolic"], "diastolic_bp": noisy_value["diastolic"]}
+                    if signal_type == "blood_pressure"
+                    else {signal_type: noisy_value}
+                )
                 for name, measured in values.items():
                     record.append({"elapsed_ms": noisy_ts, "kind": "signal", "signal_type": name, "value": measured})
 

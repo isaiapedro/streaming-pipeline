@@ -24,7 +24,11 @@ class KafkaTopicContract:
         if not replication_match or int(replication_match.group(1)) != self.replication_factor:
             errors.append(f"replication factor must equal {self.replication_factor}")
         for key, value in self.required_configs:
-            if not re.search(rf"(?:^|,){re.escape(key)}={re.escape(value)}(?:,|\s|$)", output):
+            config_pattern = (
+                rf"(?:^|[\s,]){re.escape(key)}={re.escape(value)}"
+                rf"(?=,[A-Za-z0-9_.-]+=|\s|$)"
+            )
+            if not re.search(config_pattern, output):
                 errors.append(f"{key} must equal {value}")
         if errors:
             raise RuntimeError(f"Kafka topic {self.name} configuration drift: {'; '.join(errors)}")

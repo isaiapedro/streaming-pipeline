@@ -18,7 +18,7 @@ committed at the workspace root under its governance contract.
 - NATS/Protobuf validation, DLQ isolation, deterministic NEWS2 A/B/C scoring,
   versioned telemetry, durable local outbox, Kafka/Schema Registry comparison,
   Grafana provisioning, and evidence tooling are implemented.
-- The complete offline suite passes with 185 tests and three optional live
+- The complete isolated-environment suite passes with 196 tests and three optional live
   infrastructure skips.
 - Compose renders successfully and the workspace Registry validates 42
   components.
@@ -63,6 +63,85 @@ higher level from a lower one.
 Workers do not edit another lane's owned files without coordination. Shared
 schema or semantic changes require a decision record before final evidence is
 regenerated.
+
+## Updated three-worker backlog assignment
+
+This allocation includes the defects discovered during the dissertation
+evidence reruns. The coordinator owns shared scoring semantics, Registry
+changes, clean commits/tags, and final claim approval.
+
+| Worker | Assigned remaining work | External/dependency gate |
+| --- | --- | --- |
+| **1 — Transport and schema** | Rerun final NATS provisioning/configuration and secure rejection tests; rerun Kafka compatibility, DLQ, and commit-order tests; produce NATS/Kafka parity; execute restart/disconnect/redelivery, persistence, packet-loss, and DLQ-deduplication tests; audit Protobuf artifacts, loopback ports, and broker configuration; update the bounded transport report. Kafka TLS, multi-broker durability, and hosted deployment stay decision-gated. | Clean integrated commit, exact environment, Registry-owned ports, and operator-provided test certificates/credentials. Supplies broker/config hashes and live results to Worker 2. |
+| **2 — Experimental evidence** | Make per-cell provenance crash-safe; freeze an ADEMP/STRESS protocol; account for dependence in the crossed 5×5 design; add paired A−B/A−C/B−C effects and principled non-detection estimands; add sensitivity analysis; complete approved-reference validation, latency evidence assembly, scale diagnostics/T1–T4, experimental figures, artifact lineage, and clean-clone reproduction. | Frozen coordinator scoring contract, Worker 1 live transport outputs, Worker 3 storage/alarm confirmation interfaces, approved reference data, and suitable scale hardware. |
+| **3 — Telemetry, compliance, and visualization** | Enforce privacy-safe runtime and persisted-error diagnostics; test logging/secret boundaries; audit stored-tag coverage and outbox health without exporting values; reconcile retention layers; correct Grafana A/B/C semantics; validate dashboards/alerts offline; generate implemented-versus-planned, traceability, and complete alarm-timeline visuals; expose live storage/Grafana/alert/credential gates in the manifest. Suppression remains outside scope pending a new safety decision. | Offline work is locally executable. Live Influx reconciliation, bucket retention, token rotation, rendered Grafana screenshots, and notification receipt require operator credentials or approval. Supplies aggregate audits only to Worker 2. |
+
+Cross-lane work is closed only after the consuming lane reruns its evidence
+against the producing lane's final contract. Worker 1 owns transport behavior,
+Worker 2 owns experimental inference and evidence artifacts, and Worker 3 owns
+runtime telemetry, persistence, privacy controls, and operational views.
+
+## Prior-run misses and resulting tasks
+
+| Prior miss | Impact | Prevention owner and status |
+| --- | --- | --- |
+| Ten coupled signal/noise seed pairs | Could not separate the two variation sources | Worker 2: crossed 5×5 design implemented; dependence-aware inference and variance attribution remain due |
+| Run booleans labelled TPR/FPR | Overstated clinical/event-level accuracy | Worker 2: renamed to detection-run rate and false-alarm-run probability |
+| Above-threshold scoring calls counted as alarms | Measured computation frequency instead of operational burden | Worker 2: debounced episodes and time-in-alarm implemented; clinician notification counts remain unmeasured |
+| First post-onset observation counted even when alarm was already active | Produced misleading near-zero detection latency | Worker 2: only a newly opened post-onset episode counts; plots show detected runs/25 |
+| `stable-baseline`/`stable_baseline` ID mismatch | First intended 24-hour run remained 600 seconds | Worker 2: corrected and rerun at 86,400 seconds; old output is superseded |
+| Benchmark was regenerated before concurrent NEWS2 API changes were reconciled | Intermediate results could mix SpO₂-scale and escalation semantics | Coordinator/Worker 2: scoring reconciled and complete development matrix rerun |
+| Flat normal intervals and mean-only bars | Invalid probability bounds and hidden pairing/non-detection | Worker 2: Wilson/descriptive bootstrap outputs and paired visualization implemented; crossed-design intervals remain due |
+| Run logs written only after the full matrix | A process crash can erase completed/failed-cell provenance | Worker 2: append-and-flush per-cell records plus interruption recovery tests remain P0 |
+| Manifest initially described 180 rows and did not bind the raw CSV or reject dirty release state | Stale evidence could appear releasable | Worker 2: manifest v3 validates/hashes inputs and final mode fails closed |
+| Runtime logs exposed subject/identifier plus raw value; remote exception text was retained in the outbox | Privacy/credential material could enter operational records | Worker 3: logging was sanitized; persisted errors now retain only exception class/status; regression tests added |
+| Traceability figure was hardcoded and no stored-record auditor existed | Implemented tags could be mistaken for verified live coverage | Worker 3: aggregate live/export auditor and manifest-derived status implemented; live audit remains unexecuted |
+| Grafana “A/B/C” views queried only composite alarm records | Approach A was absent while panel titles implied inclusion | Worker 3: NEWS2 is explicitly B/C-only; alarm state/observation panels union A telemetry; semantic tests added |
+| Representative timeline omitted systolic BP and explicit first A/B/C episodes | Figure did not explain all scoring inputs or detection definition | Worker 3: six-axis timeline and first-new-episode markers implemented |
+| Retention proposals were not compared with active broker policies | One-day DLQ policies could be confused with proposed seven-day review retention | Worker 3: storage-layer matrix documented; owner decision remains required before changing retention |
+
+## Remaining tasks and release blockers
+
+P0 before any final dissertation run:
+
+1. Create a reviewed clean commit, recreate the exact pinned environment, and
+   rerun tests and all final evidence. The current manifest blocks release
+   because the run log and repository are dirty and installed `pytest` and
+   `python-dotenv` differ from their pins.
+2. Worker 2 must make provenance crash-safe and freeze the full ADEMP/STRESS
+   analysis, including crossed-design dependence, paired effects, Monte Carlo
+   error, and non-detection handling.
+3. Worker 1 must rerun required live NATS/Kafka and parity gates against that
+   same clean commit.
+
+P1 evidence still unexecuted:
+
+- approved-reference distribution and temporal validation;
+- alarm-delivery and confirmed-storage latency with reconciliation;
+- NATS/MQTT/Kafka restart, persistence, packet-loss, replay, and memory tests;
+- T2–T4 on approved hardware;
+- live stored-tag coverage and outbox health from the final run;
+- Grafana provisioning/render screenshots and an approved synthetic alert
+  destination;
+- owner confirmation of Influx token rotation and retention settings.
+
+P2 hardening still due:
+
+- formal sensitivity analyses for clear hold, thresholds, signal cadence,
+  stale-window behavior, profiles, random-walk drift, and SpO₂ scale;
+- a repository-owned `doctor/test/run/verify` experiment CLI with immutable
+  run directories and locking;
+- a tracked-secret/ignored-path release scanner and clean-clone reproduction;
+- suppression design and evaluation only after a separate safety decision.
+
+### Worker 3 completion recorded in this update
+
+The locally executable Worker 3 remainder is implemented: safe persisted error
+codes, aggregate traceability and outbox-health auditors, runtime/static privacy
+tests, corrected Grafana comparison semantics, stronger offline dashboard and
+alert checks, a manifest-derived compliance status view, an architecture-status
+figure, and a complete five-input/first-episode timeline. These are V0/offline
+controls until the corresponding live gates above are executed.
 
 ## Scientific contract
 

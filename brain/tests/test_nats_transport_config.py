@@ -8,6 +8,7 @@ import pytest
 
 import config.settings as settings
 from config.nats_consumers import BRAIN_CONSUMER, NatsConsumerContract
+from config.nats_streams import ALARMS_STREAM, VITALS_STREAM
 
 
 PROJECT_ROOT = Path(__file__).parents[2]
@@ -121,6 +122,29 @@ def test_stream_setup_pins_acknowledgement_limits():
     assert "consumer edit VITALS" in script
     assert "--force" in script
     assert "check_nats_consumer_config.py" in script
+    assert "create_or_verify_stream ALARMS" in script
+    assert "check_nats_stream_config.py" in script
+
+
+def test_stream_contract_accepts_cli_nanoseconds_and_rejects_drift():
+    VITALS_STREAM.assert_matches({
+        "name": "VITALS",
+        "subjects": ["vitals.>"],
+        "max_age": 86_400_000_000_000,
+        "storage": "file",
+        "retention": "limits",
+        "num_replicas": 1,
+    })
+
+    with pytest.raises(RuntimeError, match="configuration drift"):
+        ALARMS_STREAM.assert_matches({
+            "name": "ALARMS",
+            "subjects": ["alarms.>"],
+            "max_age": 86_400_000_000_000,
+            "storage": "file",
+            "retention": "limits",
+            "num_replicas": 1,
+        })
 
 
 def test_consumer_config_checker_accepts_contract_and_rejects_drift():

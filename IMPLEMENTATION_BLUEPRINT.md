@@ -26,8 +26,8 @@ row-level external reference data are prohibited from repository artifacts.
 - MQTT PUBACK proves local broker receipt, not durable DLQ archive. The local
   scorer's NEWS2 state is memory-only and no notification consumer exists.
 - The existing evidence bundle is development evidence: it was generated from
-  a dirty tree, two installed versions differ from the pinned environment, and
-  three checksum entries are stale.
+  a dirty tree and the active `python-dotenv` version differs from its pin.
+  Current development-bundle checksums verify, but they are not final evidence.
 - Release is still blocked by Agent 2, Agent 3, and coordinator gates below.
 
 ## Parallel worker queues
@@ -51,7 +51,7 @@ Work only in benchmark, aggregation, distribution, scale/latency, and
    generate inspectable evidence and a later clean evidence commit can be
    attested without contradictory dirty-tree requirements.
 3. Recreate the exact pinned Python environment; eliminate the observed
-   `pytest` and `python-dotenv` version drift and record tool identities.
+   `python-dotenv` version drift and record tool identities.
 4. Regenerate the full 450-row crossed A/B/C benchmark and 150-record run log
    from a clean identified commit, preserving 86,400-second stable cells.
 5. Regenerate aggregates, figures, captions, manifest, and `SHA256SUMS`
@@ -65,9 +65,7 @@ Work only in benchmark, aggregation, distribution, scale/latency, and
 9. Run distribution validation only against an approved external source and
    retain non-sensitive source ID, license/DUA status, transformation version,
    direction `KL(P_synthetic || P_reference)`, and hashes—never source rows.
-10. Update or retire the stale notebook so it cannot silently diverge from the
-    canonical scripts and current metric semantics.
-11. Produce the Agent 2/M5 acceptance report with exact commands, results,
+10. Produce the Agent 2/M5 acceptance report with exact commands, results,
     skipped gates, commit identity, limitations, and evidence-level ceiling.
 
 ### Agent 3 — Telemetry, recovery, and visualization

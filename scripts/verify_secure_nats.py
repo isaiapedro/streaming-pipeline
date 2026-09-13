@@ -96,7 +96,7 @@ async def verify() -> dict[str, bool]:
             await connection.close()
         finally:
             subprocess.run(
-                [*compose, "down", "--remove-orphans"],
+                [*compose, "down", "--volumes", "--remove-orphans"],
                 cwd=PROJECT_ROOT,
                 env=compose_env,
                 check=False,

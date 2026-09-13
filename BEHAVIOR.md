@@ -41,3 +41,5 @@ data from the Personal domain.
   gates.
 - `IMPLEMENTED.md`: consolidated implementation status, historical checks,
   pending decisions, and unfinished work.
+- `TRUST_AND_ASSURANCE.md`: evidence-backed explanation of security, privacy,
+  reliability, testing, traceability, accountability, and claim limitations.

@@ -341,6 +341,8 @@ maintenance. Active remaining work and release sequencing are defined in
 Implementation status, historical verification, and outstanding decisions are
 consolidated in [IMPLEMENTED.md](IMPLEMENTED.md). Accepted standards are recorded in
 [DECISIONS.md](DECISIONS.md), and runtime telemetry/privacy requirements remain
-in [TELEMETRY_CONTRACT.md](TELEMETRY_CONTRACT.md). Milestone and worker reports
-are intentionally not retained after their unique findings have been folded
-into these authorities.
+in [TELEMETRY_CONTRACT.md](TELEMETRY_CONTRACT.md). The evidence-backed security,
+privacy, reliability, testing, traceability, accountability, and disclosure
+case is summarized in [TRUST_AND_ASSURANCE.md](TRUST_AND_ASSURANCE.md).
+Milestone and worker reports are intentionally not retained after their unique
+findings have been folded into these authorities.

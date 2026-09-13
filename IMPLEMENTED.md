@@ -235,6 +235,7 @@ The documentation set has been reduced to the following authorities:
 | `DECISIONS.md` | Accepted architectural and scientific decisions |
 | `IMPLEMENTED.md` | Consolidated implementation status, historical results, pending decisions, and unfinished work |
 | `IMPLEMENTATION_BLUEPRINT.md` | Remaining ownership queues, sequencing, acceptance gates, and release plan |
+| `TRUST_AND_ASSURANCE.md` | Evidence-backed assurance claims, control mapping, disclosure policy, and limitations |
 | `OPERATIONS_AND_REPRODUCIBILITY.md` | Canonical setup, operation, testing, maintenance, and final evidence procedure |
 | `TELEMETRY_CONTRACT.md` | Runtime telemetry, acknowledgement, privacy, retention, credential, and alert contract |
 | `evidence/README.md` | Evidence-bundle reproduction entry point |
@@ -254,7 +255,7 @@ the current tests and manifest bind it.
 
 At the time this document was last verified:
 
-- the isolated test suite reports **207 passed and 5 skipped** in the recorded
+- the isolated test suite reports **211 passed and 5 skipped** in the recorded
   sandboxed run;
 - skipped cases are explicit live-infrastructure tests, not silent passes;
 - Docker Compose configuration renders successfully;
@@ -457,7 +458,7 @@ evidence.
 
 | Built capability | Evidence already available | Additional run or decision required |
 | --- | --- | --- |
-| Complete offline unit/integration suite | 207 passed; five broker-dependent tests skipped in the ordinary offline run | Repeat from the final clean commit in an exactly pinned environment; required live tests must run with `REQUIRE_*_INTEGRATION=true` |
+| Complete offline unit/integration suite | 211 passed; five broker-dependent tests skipped in the ordinary offline run | Repeat from the final clean commit in an exactly pinned environment; required live tests must run with `REQUIRE_*_INTEGRATION=true` |
 | NATS stream/consumer provisioning and drift verification | Repeated successfully; live valid-outbox, current-run DLQ, and `ALARMS` paths passed | Repeat against the final candidate and add the approved restart/redelivery/max-delivery advisory fault matrix before broader V2 reliability claims |
 | Disposable secure-NATS verifier | Authenticated TLS accepted; anonymous, wrong-password, and untrusted-CA probes rejected | Repeat from the final candidate; production mTLS/cipher policy remains excluded unless separately approved |
 | MQTT QoS 1 publisher, bounded consumer, and invalid-input DLQ ordering | Live invalid-message test passed PUBACK-before-source-ACK | Repeat from the final candidate; broker restart/persistence and durable MQTT DLQ archival are not established |

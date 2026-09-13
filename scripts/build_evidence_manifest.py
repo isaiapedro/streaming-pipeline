@@ -45,6 +45,25 @@ def git_value(*args: str) -> str:
     return result.stdout.strip()
 
 
+def attestation_chain(implementation_commit: str | None, attestation_commit: str) -> list[str]:
+    """Validate that HEAD only adds publishable evidence to the measured code."""
+
+    if not implementation_commit:
+        return ["run log does not identify one implementation commit"]
+    try:
+        git_value("merge-base", "--is-ancestor", implementation_commit, attestation_commit)
+    except subprocess.CalledProcessError:
+        return ["run-log implementation commit is not an ancestor of the attestation commit"]
+    changed = git_value("diff", "--name-only", f"{implementation_commit}..{attestation_commit}").splitlines()
+    unexpected = sorted(path for path in changed if not path.startswith("evidence/"))
+    if unexpected:
+        return [
+            "implementation-to-attestation history changes non-evidence paths: "
+            + ", ".join(unexpected)
+        ]
+    return []
+
+
 def dependency_versions(requirements: Path) -> list[dict]:
     output = []
     for line in requirements.read_text().splitlines():
@@ -90,13 +109,32 @@ def _display_path(path: Path) -> str:
         return str(path.resolve())
 
 
-def _artifact(path: Path, record_count: int | None = None) -> dict:
+def _artifact(path: Path, record_count: int | None = None, role: str = "supporting_evidence") -> dict:
     return {
         "path": _display_path(path),
+        "role": role,
         "exists": path.is_file(),
         "sha256": file_sha256(path) if path.is_file() else None,
         "record_count": record_count,
     }
+
+
+def evidence_inventory(evidence_dir: Path) -> list[dict]:
+    """Hash publishable inputs and outputs without creating a manifest hash cycle."""
+
+    roles = {
+        "experiment_runs.jsonl": "run_provenance",
+        "benchmark_aggregate.csv": "derived_aggregate",
+        "FIGURE_CAPTIONS.md": "figure_captions",
+    }
+    inventory = []
+    for path in sorted(evidence_dir.rglob("*")):
+        if not path.is_file() or path.name in {".gitkeep", "manifest.json", "SHA256SUMS"}:
+            continue
+        relative = path.relative_to(evidence_dir).as_posix()
+        role = roles.get(relative, "figure" if relative.startswith("figures/") else "supporting_evidence")
+        inventory.append({"path": f"evidence/{relative}", "role": role, "sha256": file_sha256(path)})
+    return inventory
 
 
 def benchmark_artifacts(
@@ -181,12 +219,16 @@ def benchmark_artifacts(
         if any(entry.get("worktree_dirty") is not False for entry in logs):
             errors.append("run log was generated from a dirty or unknown worktree")
         observed_commits = {entry.get("git_commit") for entry in logs}
+        if len(observed_commits) != 1 or None in observed_commits:
+            errors.append("run log must identify exactly one implementation commit")
         if expected_commit is not None and observed_commits != {expected_commit}:
-            errors.append("run log commit does not match the manifest commit")
+            errors.append("run log commit does not match the measured implementation commit")
 
     return {
-        "raw_benchmark": _artifact(benchmark_path, len(rows) if benchmark_path.is_file() else None),
-        "run_log": _artifact(run_log_path, len(logs) if run_log_path.is_file() else None),
+        "raw_benchmark": _artifact(
+            benchmark_path, len(rows) if benchmark_path.is_file() else None, "raw_benchmark_input"
+        ),
+        "run_log": _artifact(run_log_path, len(logs) if run_log_path.is_file() else None, "run_provenance"),
         "expected_raw_rows": expected_rows,
         "expected_run_records": expected_cells,
         "validation_status": "valid" if not errors else "development_only",
@@ -206,14 +248,25 @@ def build_manifest(
     requirements = ROOT / "requirements.txt"
     dirty = bool(git_value("status", "--porcelain"))
     commit = git_value("rev-parse", "HEAD")
+    run_log = run_log_path or ROOT / "evidence" / "experiment_runs.jsonl"
+    implementation_commit = None
+    if run_log.is_file():
+        commits = {
+            json.loads(line).get("git_commit")
+            for line in run_log.read_text().splitlines()
+            if line.strip()
+        }
+        if len(commits) == 1:
+            implementation_commit = next(iter(commits))
     dependencies = dependency_versions(requirements)
     dependency_issues = [item for item in dependencies if item["status"] != "exact"]
     artifact_context = benchmark_artifacts(
         benchmark_path or ROOT / "benchmark_results.csv",
-        run_log_path or ROOT / "evidence" / "experiment_runs.jsonl",
-        commit,
+        run_log,
+        implementation_commit,
     )
     blockers = list(artifact_context["validation_errors"])
+    blockers.extend(attestation_chain(implementation_commit, commit))
     if dirty:
         blockers.append("worktree is dirty")
     if dependency_issues:
@@ -234,13 +287,14 @@ def build_manifest(
         except (OSError, json.JSONDecodeError):
             traceability_status = "invalid"
     return {
-        "manifest_version": 3,
+        "manifest_version": 4,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
         "code": {
-            "commit": commit,
+            "implementation_commit": implementation_commit,
+            "attestation_base_commit": commit,
             "worktree_dirty": dirty,
-            "note": "Final measurements must be rerun after the worktree is clean when worktree_dirty is true.",
+            "note": "The implementation commit produced the run log; the attestation base may add evidence/ artifacts only.",
         },
         "release": {
             "requested_mode": release_mode,
@@ -275,6 +329,7 @@ def build_manifest(
             "approaches": ["A", "B", "C"],
             "expected_source_rows": 450,
             "artifacts": artifact_context,
+            "publishable_artifacts": evidence_inventory(ROOT / "evidence"),
             "alarm_episode_definition": "opens on first alarming observation; closes after 10 seconds continuously clear",
             "detection_definition": "first newly opened alarm episode at or after ground-truth onset",
             "confidence_interval": "Wilson 95% interval for run probabilities; deterministic 2,000-resample bootstrap 95% interval for metric means",

@@ -9,7 +9,13 @@ from data.scenarios.definitions import SCENARIOS
 from schema import vitals_pb2
 from scripts.aggregate_benchmark import aggregate, load_rows, validate_full_matrix, write_aggregate
 from scripts.benchmark_protocol import _benchmark_payload, _wire_overhead_table
-from scripts.build_evidence_manifest import benchmark_artifacts, dependency_versions, enforce_final_release
+from scripts.build_evidence_manifest import (
+    attestation_chain,
+    benchmark_artifacts,
+    dependency_versions,
+    evidence_inventory,
+    enforce_final_release,
+)
 from scripts.measure_live_latency import percentile, summarize
 from scripts.run_benchmark import (
     DEFAULT_NOISE_SEEDS,
@@ -105,6 +111,7 @@ def _write_artifact_pair(tmp_path: Path, stable_duration_s: int = 86_400) -> tup
                         "run_id": run_id,
                         "status": "completed",
                         "worktree_dirty": False,
+                        "git_commit": "implementation",
                     }) + "\n")
     return benchmark_path, run_log_path
 
@@ -117,6 +124,22 @@ def test_manifest_artifact_contract_hashes_and_validates_crossed_design(tmp_path
     assert result["run_log"]["record_count"] == 150
     assert len(result["raw_benchmark"]["sha256"]) == 64
     assert len(result["run_log"]["sha256"]) == 64
+    assert result["raw_benchmark"]["role"] == "raw_benchmark_input"
+    assert result["run_log"]["role"] == "run_provenance"
+
+
+def test_evidence_inventory_assigns_roles_and_avoids_hash_cycle(tmp_path):
+    (tmp_path / "figures").mkdir()
+    (tmp_path / "figures" / "plot.png").write_bytes(b"plot")
+    (tmp_path / "FIGURE_CAPTIONS.md").write_text("caption")
+    (tmp_path / "manifest.json").write_text("self")
+    (tmp_path / "SHA256SUMS").write_text("self")
+    result = evidence_inventory(tmp_path)
+    assert [(item["path"], item["role"]) for item in result] == [
+        ("evidence/FIGURE_CAPTIONS.md", "figure_captions"),
+        ("evidence/figures/plot.png", "figure"),
+    ]
+    assert all(len(item["sha256"]) == 64 for item in result)
 
 
 def test_manifest_artifact_contract_rejects_short_stable_baseline(tmp_path):
@@ -129,6 +152,38 @@ def test_manifest_artifact_contract_rejects_short_stable_baseline(tmp_path):
 def test_final_release_fails_closed_with_actionable_blockers():
     with pytest.raises(RuntimeError, match="worktree is dirty"):
         enforce_final_release({"release": {"blockers": ["worktree is dirty"]}})
+
+
+def test_attestation_chain_allows_only_evidence_changes(monkeypatch):
+    def clean_chain(*args):
+        if args[:3] == ("diff", "--name-only", "implementation..attestation"):
+            return "evidence/manifest.json\nevidence/SHA256SUMS"
+        return ""
+
+    monkeypatch.setattr("scripts.build_evidence_manifest.git_value", clean_chain)
+    assert attestation_chain("implementation", "attestation") == []
+
+
+def test_attestation_chain_rejects_code_changes(monkeypatch):
+    def changed_code(*args):
+        if args[:3] == ("diff", "--name-only", "implementation..attestation"):
+            return "evidence/manifest.json\nbrain/main.py"
+        return ""
+
+    monkeypatch.setattr("scripts.build_evidence_manifest.git_value", changed_code)
+    assert attestation_chain("implementation", "attestation") == [
+        "implementation-to-attestation history changes non-evidence paths: brain/main.py"
+    ]
+
+
+def test_attestation_chain_rejects_non_ancestor(monkeypatch):
+    def no_ancestor(*args):
+        if args[:2] == ("merge-base", "--is-ancestor"):
+            raise __import__("subprocess").CalledProcessError(1, args)
+        return ""
+
+    monkeypatch.setattr("scripts.build_evidence_manifest.git_value", no_ancestor)
+    assert "not an ancestor" in attestation_chain("implementation", "attestation")[0]
 
 
 def test_dependency_contract_reports_exact_missing_and_mismatch(tmp_path, monkeypatch):

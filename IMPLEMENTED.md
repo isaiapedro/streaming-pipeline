@@ -262,9 +262,10 @@ At the time this document was last verified:
 - every entry in `evidence/SHA256SUMS` verifies; and
 - `git diff --check` reports no whitespace errors.
 
-The existing evidence is development evidence because the repository is not yet
-at a reviewed clean final commit and the active environment has recorded
-dependency drift. It must not be relabelled as final dissertation evidence.
+The evidence release gate uses a two-commit model: run records identify one
+clean implementation commit, and final mode permits only `evidence/` changes in
+its descendant attestation commit. Any intervening source or configuration
+change fails closed.
 
 ### Live release-gate and exploratory checks
 
@@ -474,10 +475,10 @@ evidence.
 
 The current `evidence/manifest.json` is therefore a development snapshot, not
 the status of the latest source tree: it records commit `f3b6169` with a dirty
-worktree. Its recorded environment was exact, while the currently reused
-`tcc_env` has `python-dotenv 1.2.3` instead of the pinned `1.0.1`. A fresh final
-environment and regenerated manifest are required even though `pip check`
-reports no broken dependency relationships.
+worktree and the superseded `python-dotenv==1.0.1` requirement. The active
+tested environment and current requirement now agree on `python-dotenv==1.2.3`.
+A fresh final environment and regenerated manifest are still required so its
+commit, requirements hash, and dependency inventory describe the final source.
 
 ## Implementation still required before those runs can close
 

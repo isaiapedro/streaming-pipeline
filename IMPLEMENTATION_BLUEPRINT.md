@@ -45,27 +45,19 @@ explicitly out of current scope, not unfinished Agent 1 work.
 Work only in benchmark, aggregation, distribution, scale/latency, and
 `evidence/` paths unless a shared semantic change is coordinated.
 
-1. Fix the evidence manifest so every raw input, run log, aggregate, figure,
-   caption, and provenance record has an explicit role and content hash.
-2. Resolve the final-mode workflow so a clean implementation commit can
-   generate inspectable evidence and a later clean evidence commit can be
-   attested without contradictory dirty-tree requirements.
-3. Recreate the exact pinned Python environment; eliminate the observed
-   `python-dotenv` version drift and record tool identities.
-4. Regenerate the full 450-row crossed A/B/C benchmark and 150-record run log
-   from a clean identified commit, preserving 86,400-second stable cells.
-5. Regenerate aggregates, figures, captions, manifest, and `SHA256SUMS`
-   together; verify every checksum and prohibit manual CSV edits.
-6. Add publish-to-successful-storage latency evidence or explicitly retain it
+The manifest inventory, two-commit attestation model, exact pinned environment,
+and clean full-matrix regeneration gates are implemented. Remaining work:
+
+1. Add publish-to-successful-storage latency evidence or explicitly retain it
    as `unexecuted`; do not infer it from local outbox acknowledgement.
-7. Extend protocol evidence beyond current throughput/latency coverage to the
+2. Extend protocol evidence beyond current throughput/latency coverage to the
    declared restart and recovery dimensions, with isolated broker control.
-8. Execute scale tiers T2–T4 or mark each tier `unexecuted`; do not generalize
+3. Execute scale tiers T2–T4 or mark each tier `unexecuted`; do not generalize
    T1 transport evidence into a 500-patient scoring/storage claim.
-9. Run distribution validation only against an approved external source and
+4. Run distribution validation only against an approved external source and
    retain non-sensitive source ID, license/DUA status, transformation version,
    direction `KL(P_synthetic || P_reference)`, and hashes—never source rows.
-10. Produce the Agent 2/M5 acceptance report with exact commands, results,
+5. Produce the Agent 2/M5 acceptance report with exact commands, results,
     skipped gates, commit identity, limitations, and evidence-level ceiling.
 
 ### Agent 3 — Telemetry, recovery, and visualization

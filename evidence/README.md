@@ -30,8 +30,10 @@ For a release, start the benchmark from a clean code commit so every run-log
 record captures `worktree_dirty=false`. Generate and inspect the development
 package, commit the reviewed generated artifacts, recreate the pinned
 environment with `python3 -m pip install --requirement requirements.txt`, and
-then run final mode from that clean state. Final mode writes the attestation;
-commit its manifest and refreshed checksums as the final evidence-only commit.
+then run final mode from that clean state. Final mode verifies that the run-log
+implementation commit is an ancestor of the current evidence commit and that
+every intervening path is under `evidence/`. It records both commit identities,
+writes the attestation, and refreshes checksums for a final evidence-only commit.
 Do not edit a manifest, run log, or checksum by hand to bypass a blocker.
 
 Live protocol, latency, scale, and approved-reference distribution commands

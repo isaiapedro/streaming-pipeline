@@ -14,14 +14,16 @@
         "path": "benchmark_results.csv",
         "record_count": 450,
         "role": "raw_benchmark_input",
-        "sha256": "7eff00fe04d286012227c290f46ca9144260f8fc46bdc64ba09987004a5bccfd"
+        "sha256": "7eff00fe04d286012227c290f46ca9144260f8fc46bdc64ba09987004a5bccfd",
+        "tracked": true
       },
       "run_log": {
         "exists": true,
         "path": "evidence/experiment_runs.jsonl",
         "record_count": 150,
         "role": "run_provenance",
-        "sha256": "05df2c01dd3c47f20b760d4f0c4d32a4345a4d5fdc9bbfcb702432b890789508"
+        "sha256": "3574474fb45e33c735ad0090100980dab688212a080dcbf974749bf736d0d4b3",
+        "tracked": true
       },
       "validation_errors": [],
       "validation_status": "valid"
@@ -61,8 +63,8 @@
         "media_type": "text/markdown",
         "path": "evidence/README.md",
         "role": "supporting_evidence",
-        "sha256": "3f806dbc7fd183d0e90b0e38e38ca2de5873b8754481f5b15b09c538b7f4fc96",
-        "size_bytes": 3195,
+        "sha256": "9af78bba8307d14a381f54bd730fa95db9d6bdd23cd71757bb75af28a0aecd45",
+        "size_bytes": 3155,
         "tracked": true
       },
       {
@@ -88,8 +90,8 @@
         "media_type": "application/octet-stream",
         "path": "evidence/experiment_runs.jsonl",
         "role": "run_provenance",
-        "sha256": "05df2c01dd3c47f20b760d4f0c4d32a4345a4d5fdc9bbfcb702432b890789508",
-        "size_bytes": 70966,
+        "sha256": "3574474fb45e33c735ad0090100980dab688212a080dcbf974749bf736d0d4b3",
+        "size_bytes": 70961,
         "tracked": true
       },
       {
@@ -275,10 +277,10 @@
     ]
   },
   "code": {
-    "attestation_base_commit": "dd7db0e4f3994c64291ded1ac1fdea064359ac57",
-    "implementation_commit": "146453b07fd74a21f4ed316fbe80d7e1ee519033",
+    "attestation_base_commit": "70ff39ffe0725f4d89d663c5bcbef6d3c2beaefb",
+    "implementation_commit": "70ff39ffe0725f4d89d663c5bcbef6d3c2beaefb",
     "note": "The implementation commit produced the run log; the attestation base may add evidence/ artifacts only.",
-    "worktree_dirty": false
+    "worktree_dirty": true
   },
   "commands": {
     "benchmark_aggregate": "python scripts/aggregate_benchmark.py --input benchmark_results.csv --output evidence/benchmark_aggregate.csv --figures-dir evidence/figures",
@@ -324,7 +326,7 @@
     "status": "unexecuted",
     "transformation_method": null
   },
-  "generated_at_utc": "2026-09-13T23:36:56.014670+00:00",
+  "generated_at_utc": "2026-09-13T23:42:12.622189+00:00",
   "live_experiments": {
     "benchmark_run_provenance": {
       "artifact": "evidence/experiment_runs.jsonl",
@@ -356,10 +358,12 @@
   "manifest_version": 4,
   "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
   "release": {
-    "blockers": [],
-    "eligible_for_final_release": true,
+    "blockers": [
+      "worktree is dirty"
+    ],
+    "eligible_for_final_release": false,
     "policy": "Development mode records blockers; final mode exits without overwriting the manifest when any blocker exists.",
-    "requested_mode": "final"
+    "requested_mode": "development"
   },
   "runtime": {
     "dependencies": [

@@ -109,6 +109,15 @@ def _display_path(path: Path) -> str:
         return str(path.resolve())
 
 
+def _is_tracked(path: Path) -> bool:
+    try:
+        relative = path.resolve().relative_to(ROOT.resolve()).as_posix()
+        git_value("ls-files", "--error-unmatch", "--", relative)
+        return True
+    except (ValueError, subprocess.CalledProcessError):
+        return False
+
+
 def _artifact(path: Path, record_count: int | None = None, role: str = "supporting_evidence") -> dict:
     return {
         "path": _display_path(path),
@@ -133,7 +142,12 @@ def evidence_inventory(evidence_dir: Path) -> list[dict]:
             continue
         relative = path.relative_to(evidence_dir).as_posix()
         role = roles.get(relative, "figure" if relative.startswith("figures/") else "supporting_evidence")
-        inventory.append({"path": f"evidence/{relative}", "role": role, "sha256": file_sha256(path)})
+        inventory.append({
+            "path": f"evidence/{relative}",
+            "role": role,
+            "sha256": file_sha256(path),
+            "tracked": _is_tracked(path),
+        })
     return inventory
 
 
@@ -265,7 +279,11 @@ def build_manifest(
         run_log,
         implementation_commit,
     )
+    publishable_artifacts = evidence_inventory(ROOT / "evidence")
     blockers = list(artifact_context["validation_errors"])
+    untracked_artifacts = [item["path"] for item in publishable_artifacts if not item["tracked"]]
+    if untracked_artifacts:
+        blockers.append("untracked publishable evidence artifacts: " + ", ".join(untracked_artifacts))
     blockers.extend(attestation_chain(implementation_commit, commit))
     if dirty:
         blockers.append("worktree is dirty")
@@ -329,7 +347,7 @@ def build_manifest(
             "approaches": ["A", "B", "C"],
             "expected_source_rows": 450,
             "artifacts": artifact_context,
-            "publishable_artifacts": evidence_inventory(ROOT / "evidence"),
+            "publishable_artifacts": publishable_artifacts,
             "alarm_episode_definition": "opens on first alarming observation; closes after 10 seconds continuously clear",
             "detection_definition": "first newly opened alarm episode at or after ground-truth onset",
             "confidence_interval": "Wilson 95% interval for run probabilities; deterministic 2,000-resample bootstrap 95% interval for metric means",

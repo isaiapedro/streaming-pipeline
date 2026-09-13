@@ -53,3 +53,6 @@ which intentionally remains at the repository root and is ignored by Git, and
 hashes the run log again as a direct provenance input. Re-run development mode
 after iterative changes; use final mode only from the frozen release commit
 and its exact environment.
+Final mode also requires every inventoried publishable artifact to be tracked
+by Git, preventing a checksum from passing locally for a file absent from a
+fresh clone.

@@ -1,0 +1,11 @@
+dimension,nats,mqtt,method,notes
+latency_p50_ms,1.63037109375,1.15966796875,measured,"live broker, canonical Protobuf"
+latency_p99_ms,3.577392578125,5.64990234375,measured,"live broker, canonical Protobuf"
+wire_payload_bytes,61,61,analytically_calculated,protocol framing around canonical Protobuf payload
+wire_nats_overhead_bytes,34,,analytically_calculated,protocol framing around canonical Protobuf payload
+wire_mqtt_qos1_overhead_bytes,,29,analytically_calculated,protocol framing around canonical Protobuf payload
+wire_mqtt_qos0_overhead_bytes,,27,analytically_calculated,protocol framing around canonical Protobuf payload
+delivery_under_drop,100/100,100/100,measured,forced publisher disconnect; not packet-level loss
+memory_usage,,,unavailable,not executed: --skip-restarts
+reconnect_recovery_s,,,unavailable,not executed: --skip-restarts
+persistence_survived,,,unavailable,not executed: --skip-restarts

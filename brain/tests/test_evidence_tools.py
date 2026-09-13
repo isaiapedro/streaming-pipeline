@@ -128,7 +128,8 @@ def test_manifest_artifact_contract_hashes_and_validates_crossed_design(tmp_path
     assert result["run_log"]["role"] == "run_provenance"
 
 
-def test_evidence_inventory_assigns_roles_and_avoids_hash_cycle(tmp_path):
+def test_evidence_inventory_assigns_roles_and_avoids_hash_cycle(tmp_path, monkeypatch):
+    monkeypatch.setattr("scripts.build_evidence_manifest._is_tracked", lambda path: True)
     (tmp_path / "figures").mkdir()
     (tmp_path / "figures" / "plot.png").write_bytes(b"plot")
     (tmp_path / "FIGURE_CAPTIONS.md").write_text("caption")
@@ -140,6 +141,7 @@ def test_evidence_inventory_assigns_roles_and_avoids_hash_cycle(tmp_path):
         ("evidence/figures/plot.png", "figure"),
     ]
     assert all(len(item["sha256"]) == 64 for item in result)
+    assert all(item["tracked"] is True for item in result)
 
 
 def test_manifest_artifact_contract_rejects_short_stable_baseline(tmp_path):

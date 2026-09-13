@@ -37,7 +37,7 @@ data from the Personal domain.
 - `TELEMETRY_CONTRACT.md`: persistence, telemetry, privacy, retention, and
   alert rules.
 - `OPERATIONS_AND_REPRODUCIBILITY.md`: executable operator procedure.
-- `IMPLEMENTATION_BLUEPRINT.md`: active ownership, sequence, and release
+- `IMPLEMENTATION_BLUEPRINT.md`: remaining work, sequencing, and release
   gates.
 - `IMPLEMENTED.md`: consolidated implementation status, historical checks,
   pending decisions, and unfinished work.

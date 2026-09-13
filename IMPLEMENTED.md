@@ -20,7 +20,7 @@ hospital-scale readiness, or suitability for real patient data.
 | Worker 1 — Transport and schema | Protobuf, NATS, MQTT/Kafka transport behavior, Schema Registry, broker provisioning, acknowledgement and offset tests | Offline transport contracts and regressions are implemented. Final live broker, restart, fault, persistence, and parity evidence remains due. |
 | Worker 2 — Experimental evidence | Benchmark design, estimands, aggregation, statistical evidence, scale/latency results, manifests and release artifacts | The corrected development matrix and evidence integrity controls are implemented. Crash-safe provenance, dependence-aware inference, reference validation, sensitivity analysis, scale T2–T4, and clean final reproduction remain due. |
 | Worker 3 — Telemetry, compliance and visualization | Runtime telemetry, durable outbox, Influx boundary, privacy-safe diagnostics, Grafana and dissertation-facing status views | All locally executable tasks from this review are implemented and unit-tested. Live Influx, rendered Grafana, alert-delivery, credential, and retention gates remain unexecuted or decision-gated. |
-| Coordinator | Shared scoring semantics, architecture decisions, Registry integration, final release and claim approval | Worker boundaries, evidence levels, prior misses, release order, and fail-closed gates are documented in `IMPLEMENTATION_BLUEPRINT.md`. |
+| Coordinator | Shared scoring semantics, architecture decisions, Registry integration, final release and claim approval | Completed work and decisions are maintained here; remaining work and fail-closed gates are maintained in `IMPLEMENTATION_BLUEPRINT.md`. |
 
 ## Implemented system capabilities
 
@@ -159,8 +159,8 @@ hospital-scale readiness, or suitability for real patient data.
 
 ### Documentation and governance
 
-- `IMPLEMENTATION_BLUEPRINT.md` contains the current three-worker allocation,
-  prior-run misses, P0/P1/P2 remaining work, release order, and claim boundary.
+- `IMPLEMENTATION_BLUEPRINT.md` contains only remaining worker queues,
+  acceptance gates, release order, and claim boundaries.
 - `TELEMETRY_CONTRACT.md` documents telemetry meanings, the durable
   acknowledgement boundary, privacy-safe audit commands, credential status,
   alert activation, and retention by storage layer.
@@ -180,7 +180,7 @@ The documentation set has been reduced to the following authorities:
 | `BEHAVIOR.md` | Workspace/domain behavioral contract required by workspace governance |
 | `DECISIONS.md` | Accepted architectural and scientific decisions |
 | `IMPLEMENTED.md` | Consolidated implementation status, historical results, pending decisions, and unfinished work |
-| `IMPLEMENTATION_BLUEPRINT.md` | Active ownership, sequencing, acceptance gates, and remaining plan |
+| `IMPLEMENTATION_BLUEPRINT.md` | Remaining ownership queues, sequencing, acceptance gates, and release plan |
 | `OPERATIONS_AND_REPRODUCIBILITY.md` | Canonical setup, operation, testing, maintenance, and final evidence procedure |
 | `TELEMETRY_CONTRACT.md` | Runtime telemetry, acknowledgement, privacy, retention, credential, and alert contract |
 | `evidence/README.md` | Evidence-bundle reproduction entry point |

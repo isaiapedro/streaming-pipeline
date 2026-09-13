@@ -1,297 +1,147 @@
-# Academic Streaming Implementation Blueprint
+# Academic Streaming — Remaining Implementation Blueprint
 
-## Purpose and authority
+## Purpose
 
-This blueprint governs implementation and release of the synthetic medical
-streaming experiment. It separates work into the same three lanes used for the
-initial implementation, defines scientific and software evidence boundaries,
-and names the gates that must pass before dissertation or demo claims are
-released. `OPERATIONS_AND_REPRODUCIBILITY.md` is the executable operator guide;
-`DECISIONS.md` records standards that must remain stable across lanes.
+This is the remaining-only roadmap for the synthetic medical streaming
+experiment. Completed work is removed from the worker queues. Historical
+results remain in `IMPLEMENTED.md`; this file contains only actionable
+implementation, test, evidence, documentation, and release gates.
 
-The Academic folder is an independent nested Git repository. Implementation
-commits belong here. Root Registry changes, including host-port ownership, are
-committed at the workspace root under its governance contract.
+The Academic folder is an independent nested repository. Root Registry changes
+remain governed and committed at the workspace root. Real patient data,
+Personal-domain observations, credentials, certificates, broker volumes, and
+row-level external reference data are prohibited from repository artifacts.
 
-## Current baseline
+## Audited implementation boundary
 
-- NATS/Protobuf validation, DLQ isolation, deterministic NEWS2 A/B/C scoring,
-  versioned telemetry, durable local outbox, Kafka/Schema Registry comparison,
-  Grafana provisioning, and evidence tooling are implemented.
-- The complete isolated-environment suite passes with 207 tests and five
-  explicit live-infrastructure skips in the recorded sandboxed run.
-- Compose renders successfully and the workspace Registry validates 42
-  components.
-- The development benchmark contains the required 450 approach rows, 150 run
-  records, and 86,400-second stable-baseline cells.
-- Development evidence is not release evidence: it was produced from a dirty
-  tree and the active environment differs from two pinned dependencies.
-- Final live NATS/Kafka reruns, clean-commit evidence reproduction, credential
-  rotation confirmation, hosted storage reconciliation, and final dashboard
-  validation remain release gates.
+- Agent 1 transport/schema implementation is complete at the development-tree
+  level: NATS stream/consumer drift enforcement, repeat-safe live DLQ and
+  durable handoff tests, disposable secure-TLS verification, fixed Kafka topic
+  contracts, validation-only Kafka scope, valid/poison parity, file-backed
+  `ALARMS`, bounded MQTT topics with PUBACK/DLQ ordering, infrastructure
+  preflight, health checks, persistent NATS storage, and digest-pinned images.
+- Kafka is a validation-only comparison. It does not run Brain scoring, commit
+  to the SQLite outbox, write InfluxDB, emit alarms, or establish application,
+  storage, alarm, or outcome parity.
+- MQTT PUBACK proves local broker receipt, not durable DLQ archive. The local
+  scorer's NEWS2 state is memory-only and no notification consumer exists.
+- The existing evidence bundle is development evidence: it was generated from
+  a dirty tree, two installed versions differ from the pinned environment, and
+  three checksum entries are stale.
+- Release is still blocked by Agent 2, Agent 3, and coordinator gates below.
 
-## Scope and claim boundary
+## Parallel worker queues
 
-This is a synthetic software experiment. It can support claims about the
-declared generator, algorithms, transport, persistence boundary, and measured
-environment. It cannot support claims of clinical effectiveness, diagnostic
-accuracy, production availability, hospital-scale readiness, or protection of
-real patient data.
+### Agent 1 — Transport and schema
 
-Evidence levels are cumulative:
+No implementation tasks remain in this queue. The clean-commit rerun and
+cross-lane release checks are coordinator-owned because they depend on all
+workers finishing. Future production TLS, multi-broker Kafka durability,
+hosted Kafka, durable MQTT DLQ archival, and a notification consumer are
+explicitly out of current scope, not unfinished Agent 1 work.
 
-| Level | Meaning | Required evidence |
-| --- | --- | --- |
-| V0 | Unit correctness | Deterministic boundary, missing-data, error, and property tests |
-| V1 | Simulation verification | Frozen scenarios/seeds/estimands, paired runs, uncertainty, provenance |
-| V2 | Live technical validation | Broker, persistence, restart, recovery, and fault evidence |
-| V3 | Independent external validation | Approved independent reference inputs and governed transformations |
-| V4 | Clinical validation | Separately approved clinical study; outside this repository's current scope |
+### Agent 2 — Experimental evidence
 
-Every public claim must name its maximum evidence level and must not infer a
-higher level from a lower one.
+Work only in benchmark, aggregation, distribution, scale/latency, and
+`evidence/` paths unless a shared semantic change is coordinated.
 
-## Ownership and active work
+1. Fix the evidence manifest so every raw input, run log, aggregate, figure,
+   caption, and provenance record has an explicit role and content hash.
+2. Resolve the final-mode workflow so a clean implementation commit can
+   generate inspectable evidence and a later clean evidence commit can be
+   attested without contradictory dirty-tree requirements.
+3. Recreate the exact pinned Python environment; eliminate the observed
+   `pytest` and `python-dotenv` version drift and record tool identities.
+4. Regenerate the full 450-row crossed A/B/C benchmark and 150-record run log
+   from a clean identified commit, preserving 86,400-second stable cells.
+5. Regenerate aggregates, figures, captions, manifest, and `SHA256SUMS`
+   together; verify every checksum and prohibit manual CSV edits.
+6. Add publish-to-successful-storage latency evidence or explicitly retain it
+   as `unexecuted`; do not infer it from local outbox acknowledgement.
+7. Extend protocol evidence beyond current throughput/latency coverage to the
+   declared restart and recovery dimensions, with isolated broker control.
+8. Execute scale tiers T2–T4 or mark each tier `unexecuted`; do not generalize
+   T1 transport evidence into a 500-patient scoring/storage claim.
+9. Run distribution validation only against an approved external source and
+   retain non-sensitive source ID, license/DUA status, transformation version,
+   direction `KL(P_synthetic || P_reference)`, and hashes—never source rows.
+10. Update or retire the stale notebook so it cannot silently diverge from the
+    canonical scripts and current metric semantics.
+11. Produce the Agent 2/M5 acceptance report with exact commands, results,
+    skipped gates, commit identity, limitations, and evidence-level ceiling.
 
-| Worker | Primary ownership | Active findings and closure evidence |
-| --- | --- | --- |
-| 1 — Transport and schema | `schema/`, `nats/`, `kafka_path/`, Compose, broker provisioning, transport tests | Govern ports; enforce schema compatibility, explicit acknowledgements, consumer drift checks, and commit ordering; produce bounded offline and live transport results |
-| 2 — Experimental evidence | Benchmark, aggregation, distribution, scale/latency scripts, `evidence/` | Enforce 450-row design, 24-hour stable baseline, raw/run hashes, KL direction, missing-value semantics, dependency identity, and dirty-tree finalization failure |
-| 3 — Telemetry and persistence | Runtime consumers, Influx writer, threshold snapshots, Grafana, telemetry tests | Commit before acknowledgement to a durable idempotent outbox; retry/replay safely; preserve provenance; validate dashboards and storage boundaries |
-| Coordinator | Shared scoring semantics, decisions, README, blueprint, integration/release | Keep NEWS2 and claim boundaries consistent, audit worker results, run combined gates, and publish only verified status |
+### Agent 3 — Telemetry, recovery, and visualization
 
-Workers do not edit another lane's owned files without coordination. Shared
-schema or semantic changes require a decision record before final evidence is
-regenerated.
+Work only in runtime persistence, telemetry, Grafana, alerting, and associated
+tests unless a shared semantic change is coordinated.
 
-## Updated three-worker backlog assignment
+1. Derive outbox idempotency from stable source-message identity and test
+   redelivery, process crash, writer restart, and duplicate suppression.
+2. Implement and verify terminal-failure quarantine/advisory handling plus
+   privacy-safe operational outbox health reporting.
+3. Reconcile accepted broker inputs, outbox state, and successful Influx writes
+   before making any remote-storage completeness claim.
+4. Obtain owner approval for Influx, broker, DLQ, alarm, and log retention;
+   configure and test only the approved policies and deletion controls.
+5. Record owner confirmation that the historically exposed Influx token was
+   rotated; never record either credential value.
+6. Correct Grafana comparison queries so Approach A from `patient_vitals` and
+   B/C from `alarms` are compared honestly, and add genuine onset-to-detection
+   timing rather than relabelling an alarm timeline.
+7. Parameterize the Influx bucket in dashboard and alert provisioning, then run
+   live datasource/query validation against final telemetry.
+8. Exercise the paused synthetic alert end to end only after an approved
+   destination is configured; retain sanitized evidence and document that the
+   local `ALARMS` stream alone is not external notification delivery.
+9. Update architecture, behavior, telemetry, Grafana, Agent 3/M6, and M7
+   reports so persistence and alert claims match the verified implementation.
 
-This allocation includes the defects discovered during the dissertation
-evidence reruns. The coordinator owns shared scoring semantics, Registry
-changes, clean commits/tags, and final claim approval.
+### Coordinator — Integration and release
 
-| Worker | Assigned remaining work | External/dependency gate |
-| --- | --- | --- |
-| **1 — Transport and schema** | Rerun final NATS provisioning/configuration and secure rejection tests; rerun Kafka compatibility, DLQ, and commit-order tests; produce NATS/Kafka parity; execute restart/disconnect/redelivery, persistence, packet-loss, and DLQ-deduplication tests; audit Protobuf artifacts, loopback ports, and broker configuration; update the bounded transport report. Kafka TLS, multi-broker durability, and hosted deployment stay decision-gated. | Clean integrated commit, exact environment, Registry-owned ports, and operator-provided test certificates/credentials. Supplies broker/config hashes and live results to Worker 2. |
-| **2 — Experimental evidence** | Make per-cell provenance crash-safe; freeze an ADEMP/STRESS protocol; account for dependence in the crossed 5×5 design; add paired A−B/A−C/B−C effects and principled non-detection estimands; add sensitivity analysis; complete approved-reference validation, latency evidence assembly, scale diagnostics/T1–T4, experimental figures, artifact lineage, and clean-clone reproduction. | Frozen coordinator scoring contract, Worker 1 live transport outputs, Worker 3 storage/alarm confirmation interfaces, approved reference data, and suitable scale hardware. |
-| **3 — Telemetry, compliance, and visualization** | Enforce privacy-safe runtime and persisted-error diagnostics; test logging/secret boundaries; audit stored-tag coverage and outbox health without exporting values; reconcile retention layers; correct Grafana A/B/C semantics; validate dashboards/alerts offline; generate implemented-versus-planned, traceability, and complete alarm-timeline visuals; expose live storage/Grafana/alert/credential gates in the manifest. Suppression remains outside scope pending a new safety decision. | Offline work is locally executable. Live Influx reconciliation, bucket retention, token rotation, rendered Grafana screenshots, and notification receipt require operator credentials or approval. Supplies aggregate audits only to Worker 2. |
+Begin these steps only after both active worker queues are complete.
 
-Cross-lane work is closed only after the consuming lane reruns its evidence
-against the producing lane's final contract. Worker 1 owns transport behavior,
-Worker 2 owns experimental inference and evidence artifacts, and Worker 3 owns
-runtime telemetry, persistence, privacy controls, and operational views.
+1. Review the combined diff for ownership, privacy, secrets, scientific
+   semantics, and agreement between Registry, manifests, decisions, behavior
+   contracts, README, operator guide, reports, and diagrams.
+2. Run Registry validation, Compose rendering for every profile, shell syntax,
+   Python compilation, dependency conformance, the complete offline suite, and
+   `git diff --check` from the clean candidate.
+3. Repeat required live NATS, secure-NATS, MQTT, Kafka, poison parity, outbox
+   recovery, Influx reconciliation, and dashboard/alert gates. A skipped live
+   gate is `unexecuted`, never passed.
+4. Verify all evidence indexes and checksums, reproduce the bundle in another
+   clean environment, and confirm every public claim stays at or below its
+   demonstrated evidence level.
+5. Commit and tag only after the nested repository is clean and every remaining
+   blocker is either passed or explicitly excluded from the release claim.
 
-## Prior-run misses and resulting tasks
+## Integration order
 
-| Prior miss | Impact | Prevention owner and status |
-| --- | --- | --- |
-| Ten coupled signal/noise seed pairs | Could not separate the two variation sources | Worker 2: crossed 5×5 design implemented; dependence-aware inference and variance attribution remain due |
-| Run booleans labelled TPR/FPR | Overstated clinical/event-level accuracy | Worker 2: renamed to detection-run rate and false-alarm-run probability |
-| Above-threshold scoring calls counted as alarms | Measured computation frequency instead of operational burden | Worker 2: debounced episodes and time-in-alarm implemented; clinician notification counts remain unmeasured |
-| First post-onset observation counted even when alarm was already active | Produced misleading near-zero detection latency | Worker 2: only a newly opened post-onset episode counts; plots show detected runs/25 |
-| `stable-baseline`/`stable_baseline` ID mismatch | First intended 24-hour run remained 600 seconds | Worker 2: corrected and rerun at 86,400 seconds; old output is superseded |
-| Benchmark was regenerated before concurrent NEWS2 API changes were reconciled | Intermediate results could mix SpO₂-scale and escalation semantics | Coordinator/Worker 2: scoring reconciled and complete development matrix rerun |
-| Kafka topic descriptions were parsed by splitting every comma | A valid `cleanup.policy=compact,delete` value was split and failed the integrated suite | Worker 1: key-aware parsing and reordered/missing/unexpected-policy regression coverage implemented; final live provisioning rerun remains due |
-| Flat normal intervals and mean-only bars | Invalid probability bounds and hidden pairing/non-detection | Worker 2: Wilson/descriptive bootstrap outputs and paired visualization implemented; crossed-design intervals remain due |
-| Run logs written only after the full matrix | A process crash can erase completed/failed-cell provenance | Worker 2: append-and-flush per-cell records plus interruption recovery tests remain P0 |
-| Manifest initially described 180 rows and did not bind the raw CSV or reject dirty release state | Stale evidence could appear releasable | Worker 2: manifest v3 validates/hashes inputs and final mode fails closed |
-| Runtime logs exposed subject/identifier plus raw value; remote exception text was retained in the outbox | Privacy/credential material could enter operational records | Worker 3: logging was sanitized; persisted errors now retain only exception class/status; regression tests added |
-| Traceability figure was hardcoded and no stored-record auditor existed | Implemented tags could be mistaken for verified live coverage | Worker 3: aggregate live/export auditor and manifest-derived status implemented; live audit remains unexecuted |
-| Grafana “A/B/C” views queried only composite alarm records | Approach A was absent while panel titles implied inclusion | Worker 3: NEWS2 is explicitly B/C-only; alarm state/observation panels union A telemetry; semantic tests added |
-| Representative timeline omitted systolic BP and explicit first A/B/C episodes | Figure did not explain all scoring inputs or detection definition | Worker 3: six-axis timeline and first-new-episode markers implemented |
-| Retention proposals were not compared with active broker policies | One-day DLQ policies could be confused with proposed seven-day review retention | Worker 3: storage-layer matrix documented; owner decision remains required before changing retention |
+Agent 2 and Agent 3 may proceed concurrently. They must not regenerate or
+mutate the same evidence bundle during a run. Shared schema, scoring, retention,
+or public-claim changes require a `DECISIONS.md` update before final evidence is
+regenerated. The coordinator freezes implementation first, then evidence, then
+performs the independent clean-environment reproduction.
 
-## Remaining tasks and release blockers
+## Release gate
 
-P0 before any final dissertation run:
+Release is allowed only when all applicable statements are true:
 
-1. Create a reviewed clean commit, recreate the exact pinned environment, and
-   rerun tests and all final evidence. The current manifest blocks release
-   because the run log and repository are dirty and installed `pytest` and
-   `python-dotenv` differ from their pins.
-2. Worker 2 must make provenance crash-safe and freeze the full ADEMP/STRESS
-   analysis, including crossed-design dependence, paired effects, Monte Carlo
-   error, and non-detection handling.
-3. Worker 1 must rerun required live NATS/Kafka and parity gates against that
-   same clean commit.
-
-P1 evidence still unexecuted:
-
-- approved-reference distribution and temporal validation;
-- alarm-delivery and confirmed-storage latency with reconciliation;
-- NATS/MQTT/Kafka restart, persistence, packet-loss, replay, and memory tests;
-- T2–T4 on approved hardware;
-- live stored-tag coverage and outbox health from the final run;
-- Grafana provisioning/render screenshots and an approved synthetic alert
-  destination;
-- owner confirmation of Influx token rotation and retention settings.
-
-P2 hardening still due:
-
-- formal sensitivity analyses for clear hold, thresholds, signal cadence,
-  stale-window behavior, profiles, random-walk drift, and SpO₂ scale;
-- a repository-owned `doctor/test/run/verify` experiment CLI with immutable
-  run directories and locking;
-- a tracked-secret/ignored-path release scanner and clean-clone reproduction;
-- suppression design and evaluation only after a separate safety decision.
-
-### Worker 3 completion recorded in this update
-
-The locally executable Worker 3 remainder is implemented: safe persisted error
-codes, aggregate traceability and outbox-health auditors, runtime/static privacy
-tests, corrected Grafana comparison semantics, stronger offline dashboard and
-alert checks, a manifest-derived compliance status view, an architecture-status
-figure, and a complete five-input/first-episode timeline. These are V0/offline
-controls until the corresponding live gates above are executed.
-
-## Scientific contract
-
-### NEWS2 scope
-
-- The prototype measures respiratory rate, SpO2, systolic blood pressure,
-  heart rate, and temperature.
-- Supplemental oxygen and consciousness subscores are fixed at zero and must
-  be stated in every interpretation.
-- Scale 1 is the default SpO2 scale. Scale 2 is selected only through explicit
-  `news2_spo2_scale=2` metadata representing a documented prescription for
-  confirmed hypercapnic respiratory failure. COPD alone never selects Scale 2.
-- Composite scoring occurs only when all five required readings exist and are
-  fresh within the declared window. Missing or stale windows have no score.
-- A total score of 7 or more is critical. A total of 5–6, or any individual
-  parameter scoring 3, is warning/escalation.
-
-Golden boundary, invalid scale, incomplete-window, stale-window, and
-single-parameter escalation tests are mandatory after scoring changes.
-
-### Experiment design
-
-- Six declared scenarios are crossed with five signal seeds and five noise
-  seeds and evaluated with approaches A/B/C: 450 approach rows total.
-- Stable-baseline duration is 86,400 simulated seconds for each cell.
-- Detection is credited only when a new alarm episode opens at or after the
-  configured onset. An already-open alarm at onset is not a detection.
-- Alarm burden is episode based with the declared clear-hold interval.
-- Missing or inapplicable values remain missing; they are never coerced to
-  zero.
-- Probability intervals use the documented Wilson method. Other estimates use
-  the documented bootstrap method and report distribution summaries.
-- Distribution divergence is labelled `KL(P_synthetic || P_reference)` with
-  its smoothing and transformation metadata.
-
-## Transport, persistence, and security contract
-
-### Ports and external infrastructure
-
-Host ports are owned globally in `registry/PORTS.md`. Academic currently owns
-1883, 4222, 8222, 18081, and 19092. Published services bind to loopback. A
-fixed-port change updates Compose, the root registry, and the Academic decision
-record together. Operators inspect existing listeners and never stop unrelated
-services as an undocumented workaround.
-
-External folders are inputs only when explicitly supplied. Raw clinical or
-reference rows, Personal-domain observations, secrets, certificates, broker
-volumes, `.runtime/`, and virtual environments remain outside Git. Publishable
-evidence contains aggregate synthetic results and non-sensitive provenance.
-
-### Delivery semantics
-
-| Path | Success required before acknowledgement/commit |
-| --- | --- |
-| Valid NATS/MQTT input | Atomic local SQLite WAL outbox commit of all derived records |
-| Invalid NATS input | Confirmed structured DLQ publication |
-| Valid Kafka input | Successful handler completion/durable declared side effect |
-| Invalid Kafka input | Confirmed Kafka DLQ delivery |
-
-NATS consumers verify `AckExplicit`, `AckWait`, `MaxDeliver`, and
-`MaxAckPending`. Kafka disables automatic commits and offset storage. Stable
-content keys make outbox redelivery idempotent. Capacity failure applies
-backpressure. Influx failures stay queued with bounded retry across restart.
-Acknowledgement proves local durable handoff, not successful remote Influx
-storage.
-
-Credentials are injected by the operator and never printed, committed, or
-stored in evidence. The ignored Influx token identified during review must be
-rotated by its owner and only the confirmation date/status recorded.
-
-## Auditability and indexing
-
-Traceability follows:
-
-`claim -> requirement/decision -> code -> test -> run -> aggregate -> figure`.
-
-- The Registry indexes ownership and dependency boundaries.
-- `manifest.yaml` declares the Academic component boundary.
-- `evidence/manifest.json` indexes input/output roles, hashes, commands,
-  versions, run status, dependency conformance, and release blockers.
-- `evidence/SHA256SUMS` protects publishable bundle files but does not replace
-  the manifest's raw-input hashes.
-- Influx tags are bounded query dimensions: signal, approach, scenario,
-  transport, and schema/pipeline/threshold versions. Values, hashes, run IDs,
-  and other high-cardinality data remain fields unless a measured query need
-  justifies indexing.
-- Logs record counts, versions, duration, severity, and synthetic scenario
-  context without combining a patient identifier and raw vital value.
-
-## Milestone sequence
-
-| Milestone | Exit condition |
-| --- | --- |
-| M3 — NATS closure | Clean baseline; offline and required live NATS tests; secure-profile rejection evidence |
-| M4 — Transport comparison | Isolated Kafka schema, compatibility, DLQ, commit-order, and live parity evidence |
-| M5 — Experimental evidence | Clean reproducible A/B/C, protocol, distribution, live-latency, and scale artifacts |
-| M6 — Telemetry/compliance | Provenance tags, durable outbox/recovery, retention and credential controls |
-| M7 — Visualization/release | Validated dashboards, alert exercise, final reports, clean tag, reproducibility audit |
-
-M4–M6 may develop in parallel after the shared message/scoring contract is
-frozen. M7 consumes their verified outputs.
-
-## Release procedure
-
-1. Review all worker diffs and privacy/secret boundaries.
-2. Run Registry validation, Compose rendering, shell syntax, dependency checks,
-   the full offline suite, and Git whitespace checks.
-3. Commit the reviewed implementation in the nested Academic repository.
-4. Recreate the exact pinned environment from `requirements.txt` and repeat
-   the offline gate.
-5. Start only the required loopback infrastructure; provision and verify NATS
-   consumers, Kafka topics, and Schema Registry compatibility.
-6. Run required live NATS and Kafka tests plus the parity harness. Stop the
-   temporary infrastructure explicitly.
-7. From the clean implementation commit, regenerate the 450-row benchmark and
-   its run log, aggregate tables, figures, development manifest, and checksums.
-8. Review generated evidence, commit it, then run final manifest mode from the
-   clean evidence commit. Commit the final attestation/checksums.
-9. Execute approved live storage latency, scale T1–T4, distribution validation,
-   and Grafana alert/dashboard gates. Unavailable gates remain `unexecuted`.
-10. Record credential rotation confirmation and complete a clean-clone
-    reproduction before signing/tagging the release.
-
-Exact commands, environment variables, backup/recovery procedures, and
-troubleshooting are in `OPERATIONS_AND_REPRODUCIBILITY.md`.
-
-## Final release gate
-
-Release is allowed only when all applicable items are true:
-
-- the nested repository is clean and its commit/tag is identified;
+- the nested repository is clean and identifies the implementation/evidence
+  commits and tag;
 - the installed environment exactly matches pinned requirements;
-- offline tests pass and required live NATS/Kafka tests pass;
-- ports match Registry and Compose has no collision;
-- no secret/privacy scan finds credentials or prohibited source rows;
-- NEWS2 scale, escalation, and incomplete-window contracts pass;
-- acknowledgement/offset tests prove the declared durable side effect precedes
-  acknowledgement;
-- raw inputs and every evidence output are indexed and hashed;
-- benchmark, scale, protocol, distribution, storage-latency, and dashboard
-  artifacts have reproducible manifests or are explicitly `unexecuted`;
-- Influx records contain agreed provenance and remote storage claims are backed
-  by reconciliation evidence;
-- README, decisions, reports, diagrams, and behavior contracts describe the
-  same implementation;
-- another clean environment reproduces the offline outputs without an
-  undocumented workaround;
-- every public claim stays at or below its verified V0–V4 level;
-- credential rotation is owner-confirmed without recording any secret value.
+- offline and explicitly required live tests pass with no required skips;
+- ports match Registry, selected Compose profiles are healthy, and image
+  digests/configuration hashes are recorded without secret-derived material;
+- acknowledgement and commit tests prove only the documented local boundaries;
+- every raw input and generated output is indexed and hashed;
+- benchmark, protocol, distribution, scale, storage, dashboard, and alert
+  artifacts are reproducible or explicitly `unexecuted`;
+- retention and credential-rotation decisions have owner confirmation;
+- another clean environment reproduces the offline outputs; and
+- public wording does not exceed the verified V0 unit, V1 simulation, or V2
+  live technical evidence. V3 external and V4 clinical validation remain
+  unavailable unless separately approved and executed.
 
-If any item fails, final-mode evidence generation must fail without overwriting
+If any gate fails, final-mode evidence generation must fail without overwriting
 the last inspectable development manifest.

@@ -31,9 +31,9 @@ The repository must also work from an arbitrary clean-clone location.
 | Approach B | `brain/approaches.py` | Computes the composite rule at an approximately 60-second cadence | Five measured NEWS2 inputs; oxygen/consciousness fixed to zero |
 | Approach C | `brain/approaches.py` | Recomputes the same composite rule after each incoming reading | Same constrained NEWS2 scope as B |
 | NATS transport | `producer/`, `brain/main.py`, `nats/` | Durable edge stream, explicit-ack consumer, schema validation, separate DLQ | Valid input is acknowledged after the local durable outbox commit, not remote Influx delivery |
-| Local alarm stream | `brain/local_scorer.py` | Emits priority-preserving alarm events to NATS | Does not make an external clinical notification |
-| MQTT comparison | `producer/main.py --dual-mqtt`, `brain/mqtt_consumer.py` | Mirrors messages through Mosquitto using QoS 1 and manual acknowledgement after durable handoff | Closed local broker; broad `#` subscription is not a production topology |
-| Kafka comparison | `kafka_path/`, Compose `kafka` profile | Isolated Protobuf/Schema Registry producer, validator, manual-offset consumer, DLQ | Local research comparison on governed loopback ports; not the NATS MVP |
+| Local alarm stream | `brain/local_scorer.py` | Emits priority-preserving events to a seven-day file-backed `ALARMS` stream | Publish-confirmed before source ACK; scorer state is memory-only and no notification consumer exists |
+| MQTT comparison | `producer/main.py --dual-mqtt`, `brain/mqtt_consumer.py` | Mirrors slash-hierarchy messages through Mosquitto with QoS 1, bounded subscription, and DLQ-before-source-ACK rejection | PUBACK proves broker receipt, not durable archive; NATS/MQTT publication is not atomic |
+| Kafka validation comparison | `kafka_path/`, Compose `kafka` profile | Isolated Protobuf/Schema Registry producer, validator, manual-offset consumer, DLQ | Validation/acceptance/rejection/latency only; no Brain scoring, outbox, storage, or alarm parity |
 | InfluxDB telemetry | `brain/influx_writer.py` | Persists records to a private SQLite WAL outbox, then delivers retryable batches with provenance tags | Local outbox durability and idempotent replay; remote Influx availability is asynchronous |
 | Grafana comparison | `grafana/provisioning/` | Displays A/B/C results and version metadata; alert rule is paused | Validate against final telemetry before release |
 | Offline benchmark | `scripts/run_benchmark.py` | Runs six scenarios across crossed signal/noise seeds for A/B/C, including the 24-hour stable baseline | Deterministic development evidence exists; final mode requires a clean identified commit |
@@ -81,7 +81,7 @@ Required for live local infrastructure:
 
 - Docker Engine with Compose v2;
 - NATS CLI for `scripts/create_streams.sh`;
-- `curl` for health checks;
+- `curl` for host health checks and `openssl` for the disposable secure-NATS test;
 - local permission to inspect listening ports.
 
 Optional:
@@ -125,10 +125,11 @@ The runtime accepts these environment variables:
 | `FLUSH_INTERVAL_S`, `FLUSH_BUFFER_SIZE` | Influx delivery | Delivery wake interval and maximum batch size |
 | `KAFKA_BOOTSTRAP_SERVERS` | Non-default Kafka | Default `localhost:19092` |
 | `SCHEMA_REGISTRY_URL` | Kafka path | Default `http://localhost:18081` |
-| `KAFKA_VITALS_TOPIC`, `KAFKA_DLQ_TOPIC`, `KAFKA_GROUP_ID` | Kafka override | Isolated topic/group names |
+| `KAFKA_GROUP_ID` | Kafka override | Isolated consumer group name; topic names are fixed by the provisioned research contract |
 | `KAFKA_SCHEMA_COMPATIBILITY` | Kafka schema governance | Expected compatibility policy; default `BACKWARD_TRANSITIVE` |
 | `REQUIRE_NATS_INTEGRATION` | Required live NATS test | Makes unavailable or insecure infrastructure fail rather than skip |
 | `REQUIRE_KAFKA_INTEGRATION` | Required live Kafka test | Makes unavailable Kafka/Schema Registry fail rather than skip |
+| `REQUIRE_MQTT_INTEGRATION` | Required live MQTT test | Makes unavailable Mosquitto fail rather than skip |
 
 Use a local ignored `.env` only for development. A release run should inject
 secrets from the operator environment and retain only a sanitized list of which
@@ -152,6 +153,7 @@ Inspect without changing other services:
 ss -ltnp | rg ':(1883|4222|8222|18081|19092)\b'
 docker ps --format 'table {{.Names}}\t{{.Ports}}'
 docker compose config --quiet
+.venv/bin/python scripts/infrastructure_doctor.py --profile nats
 ```
 
 If a port is occupied, identify its owner. Do not stop an unrelated service as
@@ -192,11 +194,10 @@ docker compose ps
 bash scripts/create_streams.sh
 ```
 
-`create_streams.sh` creates file-backed `VITALS` and `VITALS_DLQ` streams and
-the `BRAIN` and `LOCAL_SCORER` explicit-ack consumers. Existing resources are
-currently inspected only for existence, not reconciled. Before a final run,
-use a fresh isolated Compose project/volume or implement configuration drift
-verification; do not assume an old consumer has the declared policy.
+`create_streams.sh` creates or reconciles and then verifies file-backed
+`VITALS` (24 hours), `VITALS_DLQ` (24 hours), and `ALARMS` (seven days), plus
+the `BRAIN` and `LOCAL_SCORER` explicit-ack consumers. Configuration drift or a
+CLI/authentication failure aborts provisioning.
 
 Run each long-lived component in its own terminal so shutdown remains explicit.
 
@@ -224,7 +225,10 @@ state without deleting it:
 
 ```bash
 nats --server "${NATS_URL:-nats://localhost:4222}" stream info VITALS
+nats --server "${NATS_URL:-nats://localhost:4222}" stream info VITALS_DLQ
+nats --server "${NATS_URL:-nats://localhost:4222}" stream info ALARMS
 nats --server "${NATS_URL:-nats://localhost:4222}" consumer info VITALS BRAIN
+nats --server "${NATS_URL:-nats://localhost:4222}" consumer info VITALS LOCAL_SCORER
 docker compose ps
 ```
 
@@ -253,6 +257,12 @@ REQUIRE_NATS_INTEGRATION=true .venv/bin/python -m pytest -q \
   brain/tests/test_integration_nats.py
 ```
 
+For an isolated automated authentication/trust check, first stop insecure NATS
+and run `.venv/bin/python scripts/verify_secure_nats.py`. It creates disposable
+credentials and certificates in a uniquely named Compose project, verifies
+authenticated TLS plus anonymous/wrong-password/untrusted-CA rejection, and
+removes the test container afterward.
+
 ## MQTT comparison
 
 Start NATS and Mosquitto, then provision NATS:
@@ -275,10 +285,15 @@ Run the dual publisher in another:
   --scenario stable_baseline --signal-seed 1000 --noise-seed 2000
 ```
 
-This is a transport comparison. The MQTT consumer uses QoS 1 with manual
-acknowledgement only after its local durable outbox handoff. It subscribes to
-`#` because messages retain dot-separated NATS subjects. Do not reuse this
-topology on a shared broker.
+This is a transport comparison. MQTT uses
+`vitals/{patient_id}/{signal_type}` and subscribes only to `vitals/#`. Valid
+input is manually acknowledged after its local durable outbox handoff. Invalid
+input is acknowledged after a confirmed QoS 1 publication to
+`dlq/vitals/mqtt`. PUBACK proves broker receipt, not durable archival or later
+consumption. The dual publisher treats NATS and MQTT as independent writes.
+
+Run `REQUIRE_MQTT_INTEGRATION=true .venv/bin/python -m pytest -q
+brain/tests/test_integration_mqtt.py` for the live invalid-message gate.
 
 Run the protocol harness only when its declared prerequisites are available:
 
@@ -291,13 +306,10 @@ Omitting `--skip-restarts` authorizes the harness to restart its specifically
 named local broker containers. Do not run that mode against shared or remote
 infrastructure.
 
-## Kafka comparison
+## Kafka validation comparison
 
-The Kafka code exists but the default host ports are not governance-ready. Do
-not enable this profile until the coordinator resolves the Kafka scope and the
-root Registry owns non-conflicting host ports.
-
-After that decision and configuration change, the intended workflow is:
+The root Registry reserves loopback ports 19092 and 18081 for this isolated
+profile. Start only its named services:
 
 ```bash
 docker compose --profile kafka up -d kafka schema-registry
@@ -324,8 +336,9 @@ PIPELINE_VERSION=CLEAN_COMMIT_OR_TAG .venv/bin/python -m kafka_path.producer \
 The producer waits for broker delivery confirmation. The consumer disables
 automatic offset commit/storage and commits synchronously only after a valid
 synchronous handler completes, or after a rejected record is confirmed in the
-DLQ. It does not yet provide the same full scoring/storage handler as the NATS
-Brain and must not be described as runtime parity.
+DLQ. The shipped handler prints a validated record; it does not provide Brain
+scoring, outbox persistence, Influx delivery, or alarms and must not be
+described as runtime parity.
 
 ## Acknowledgement and durability semantics
 
@@ -333,7 +346,7 @@ NATS JetStream and Kafka provide at-least-once delivery in the configured
 paths. Duplicate processing remains possible, so output writes must be
 idempotent.
 
-Current NATS behavior:
+Current NATS Brain behavior:
 
 1. Invalid input is acknowledged only after confirmed DLQ publication.
 2. Valid input is decoded and scored without committing its in-memory state.
@@ -350,6 +363,13 @@ duplicate outbox rows on redelivery. Never call this remote end-to-end
 durability. Monitor `AckWait`, `MaxDeliver`, `MaxAckPending`, outbox pending
 count, retry attempts, last error, disk capacity, and maximum-delivery
 advisories; quarantine terminal failures under an approved retention policy.
+
+MQTT uses the same valid-record outbox boundary. Invalid input is source-ACKed
+only after `dlq/vitals/mqtt` PUBACK. The local NATS scorer instead awaits an
+`ALARMS` JetStream publish acknowledgement before source ACK; its scoring state
+is memory-only, so no restart-continuity claim is made. Kafka commits a valid
+record after its synchronous validation handler completes, or a poison record
+after confirmed DLQ delivery; the shipped handler is not durable storage.
 
 Official NATS consumer semantics:
 <https://docs.nats.io/nats-concepts/jetstream/consumers>
@@ -515,7 +535,8 @@ For every change:
 3. Add or update tests before generating evidence.
 4. Run the offline gate and relevant live gate.
 5. Commit only the owning lane's files.
-6. Integrate in the order defined by `IMPLEMENTATION_BLUEPRINT.md`.
+6. Integrate in the worker and release order defined by
+   `IMPLEMENTATION_BLUEPRINT.md`.
 7. Regenerate final evidence only after the runtime and schema are frozen.
 
 ### Dependency update
@@ -607,13 +628,15 @@ A dissertation/demo evidence release is ready only when:
 - the Kafka decision, implementation, README, reports, and Compose agree;
 - acknowledgements occur only after the declared local durability boundary,
   and remote storage is claimed only when separately reconciled;
-- NEWS2 scope and scientific corrections in the blueprint are complete;
+- NEWS2 scope and scientific corrections recorded in `DECISIONS.md` and the
+  remaining blueprint are complete;
 - raw experiment inputs and every evidence output are indexed and hashed;
 - no prohibited data or secrets are present;
 - another clean environment reproduces the aggregate tables and figures;
 - claims remain at or below their verified V0–V4 evidence level.
 
-The governing implementation and scientific requirements are in
-`IMPLEMENTATION_BLUEPRINT.md`; runtime telemetry and retention rules are in
-`TELEMETRY_CONTRACT.md`; evidence-specific limitations are in
+Completed implementation and pending decisions are in `IMPLEMENTED.md`;
+remaining work and release gates are in `IMPLEMENTATION_BLUEPRINT.md`;
+accepted standards are in `DECISIONS.md`; runtime telemetry and retention
+rules are in `TELEMETRY_CONTRACT.md`; evidence-specific limitations are in
 `evidence/LIMITATIONS.md`.

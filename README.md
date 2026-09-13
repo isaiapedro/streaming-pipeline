@@ -333,12 +333,11 @@ SIGNAL_THRESHOLDS = {
 Use [OPERATIONS_AND_REPRODUCIBILITY.md](OPERATIONS_AND_REPRODUCIBILITY.md) as
 the canonical guide for environment setup, feature behavior, ports,
 acknowledgement semantics, infrastructure profiles, evidence reproduction, and
-maintenance. Governance and remaining acceptance work are defined in
+maintenance. Active remaining work and release sequencing are defined in
 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md).
 
-The complete implementation summary, historical verification context,
-outstanding decisions, and unfinished work are consolidated in
-[IMPLEMENTED.md](IMPLEMENTED.md). Accepted standards are recorded in
+Implementation status, historical verification, and outstanding decisions are
+consolidated in [IMPLEMENTED.md](IMPLEMENTED.md). Accepted standards are recorded in
 [DECISIONS.md](DECISIONS.md), and runtime telemetry/privacy requirements remain
 in [TELEMETRY_CONTRACT.md](TELEMETRY_CONTRACT.md). Milestone and worker reports
 are intentionally not retained after their unique findings have been folded

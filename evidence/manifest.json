@@ -21,7 +21,7 @@
         "path": "evidence/experiment_runs.jsonl",
         "record_count": 150,
         "role": "run_provenance",
-        "sha256": "f83bb8849d3ccfb53a5dff0ea710e83bbed875d19198bf0c307bfb129c89b951"
+        "sha256": "05df2c01dd3c47f20b760d4f0c4d32a4345a4d5fdc9bbfcb702432b890789508"
       },
       "validation_errors": [],
       "validation_status": "valid"
@@ -39,109 +39,193 @@
     ],
     "publishable_artifacts": [
       {
+        "generated_by": "maintained documentation",
+        "media_type": "text/markdown",
         "path": "evidence/FIGURE_CAPTIONS.md",
         "role": "figure_captions",
-        "sha256": "3f76dc73e426e7552444dd67d9e2d69a3b4e01b45bc0bac9df255fb16d97ddf7"
+        "sha256": "3f76dc73e426e7552444dd67d9e2d69a3b4e01b45bc0bac9df255fb16d97ddf7",
+        "size_bytes": 2381,
+        "tracked": true
       },
       {
+        "generated_by": "maintained documentation",
+        "media_type": "text/markdown",
         "path": "evidence/LIMITATIONS.md",
         "role": "supporting_evidence",
-        "sha256": "243521ad7401aecb33805a8eb20eedf0f3e5f47ffcb7af497a6fe5505daf7ff1"
+        "sha256": "243521ad7401aecb33805a8eb20eedf0f3e5f47ffcb7af497a6fe5505daf7ff1",
+        "size_bytes": 2444,
+        "tracked": true
       },
       {
+        "generated_by": "maintained documentation",
+        "media_type": "text/markdown",
         "path": "evidence/README.md",
         "role": "supporting_evidence",
-        "sha256": "7a66cd33a09ff5dbec9b12cf4b701519c824d7f9ed57da8b398be37a56e6c67e"
+        "sha256": "3f806dbc7fd183d0e90b0e38e38ca2de5873b8754481f5b15b09c538b7f4fc96",
+        "size_bytes": 3195,
+        "tracked": true
       },
       {
+        "generated_by": "maintained documentation",
+        "media_type": "text/markdown",
         "path": "evidence/RESULTS.md",
         "role": "supporting_evidence",
-        "sha256": "d4bf4e1481659f31ef0237e33269b44b07535fd161b516d9bb68a25594edb78e"
+        "sha256": "d4bf4e1481659f31ef0237e33269b44b07535fd161b516d9bb68a25594edb78e",
+        "size_bytes": 3313,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/aggregate_benchmark.py",
+        "media_type": "text/csv",
         "path": "evidence/benchmark_aggregate.csv",
         "role": "derived_aggregate",
-        "sha256": "4544707c4bdb6bb540ced3d2b806308a304edd2e9e3a5a17c583aea4fb383d5c"
+        "sha256": "4544707c4bdb6bb540ced3d2b806308a304edd2e9e3a5a17c583aea4fb383d5c",
+        "size_bytes": 11930,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/run_benchmark.py",
+        "media_type": "application/octet-stream",
         "path": "evidence/experiment_runs.jsonl",
         "role": "run_provenance",
-        "sha256": "f83bb8849d3ccfb53a5dff0ea710e83bbed875d19198bf0c307bfb129c89b951"
+        "sha256": "05df2c01dd3c47f20b760d4f0c4d32a4345a4d5fdc9bbfcb702432b890789508",
+        "size_bytes": 70966,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/aggregate_benchmark.py",
+        "media_type": "image/png",
         "path": "evidence/figures/abc_alarm_episode_rate.png",
         "role": "figure",
-        "sha256": "c7e88b196397fd10abdd170f2deacfb4633900d6cc05390e45b4d73b0cba89c2"
+        "sha256": "c7e88b196397fd10abdd170f2deacfb4633900d6cc05390e45b4d73b0cba89c2",
+        "size_bytes": 87842,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/aggregate_benchmark.py",
+        "media_type": "image/png",
         "path": "evidence/figures/abc_detection_latency.png",
         "role": "figure",
-        "sha256": "a239f06092a2683d20ca9e1be0c87ba7968747205f01207eedfa457afa8f82b1"
+        "sha256": "a239f06092a2683d20ca9e1be0c87ba7968747205f01207eedfa457afa8f82b1",
+        "size_bytes": 253686,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/aggregate_benchmark.py",
+        "media_type": "image/png",
         "path": "evidence/figures/abc_false_alarm_probability.png",
         "role": "figure",
-        "sha256": "f7a1d6f26e83224e92a3df5ec2a532e9654cd29977296091ffe44a832f1d539b"
+        "sha256": "f7a1d6f26e83224e92a3df5ec2a532e9654cd29977296091ffe44a832f1d539b",
+        "size_bytes": 75466,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/aggregate_benchmark.py",
+        "media_type": "image/png",
         "path": "evidence/figures/abc_representative_timeline.png",
         "role": "figure",
-        "sha256": "948d652ffba984779943e051d7cc61ee7010c600fb712e45f7132eef5ca33cf3"
+        "sha256": "948d652ffba984779943e051d7cc61ee7010c600fb712e45f7132eef5ca33cf3",
+        "size_bytes": 498795,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/aggregate_benchmark.py",
+        "media_type": "image/png",
         "path": "evidence/figures/abc_tradeoff.png",
         "role": "figure",
-        "sha256": "52883d509c550dca4d450b02211fcd464fbf397a6e84ee651a60191f32309dc8"
+        "sha256": "52883d509c550dca4d450b02211fcd464fbf397a6e84ee651a60191f32309dc8",
+        "size_bytes": 98791,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/generate_evidence_status.py",
+        "media_type": "image/png",
         "path": "evidence/figures/architecture_status.png",
         "role": "figure",
-        "sha256": "0751a2cdc645b345a1fedf244b343faf8345a67cab9383b18ad540e80aaf169e"
+        "sha256": "0751a2cdc645b345a1fedf244b343faf8345a67cab9383b18ad540e80aaf169e",
+        "size_bytes": 174956,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/generate_evidence_status.py",
+        "media_type": "image/png",
         "path": "evidence/figures/evidence_status.png",
         "role": "figure",
-        "sha256": "89df6bf98645a0c8020c9f7d9a5cc4e4cf3f93f5969f3b1e179b779512d07c06"
+        "sha256": "89df6bf98645a0c8020c9f7d9a5cc4e4cf3f93f5969f3b1e179b779512d07c06",
+        "size_bytes": 157893,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/generate_evidence_status.py",
+        "media_type": "image/png",
         "path": "evidence/figures/protocol_latency.png",
         "role": "figure",
-        "sha256": "2f403b83d9571ae6f6df7939ccde311a11e69b9efe4d897e957bed4351d9518a"
+        "sha256": "2f403b83d9571ae6f6df7939ccde311a11e69b9efe4d897e957bed4351d9518a",
+        "size_bytes": 39833,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/generate_evidence_status.py",
+        "media_type": "image/png",
         "path": "evidence/figures/scale_status.png",
         "role": "figure",
-        "sha256": "9faece79f171036f1a4b40e401d7173db5f13341aaeb30952ce0850dbcfd3aa0"
+        "sha256": "9faece79f171036f1a4b40e401d7173db5f13341aaeb30952ce0850dbcfd3aa0",
+        "size_bytes": 63178,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/generate_evidence_status.py",
+        "media_type": "image/png",
         "path": "evidence/figures/traceability_status.png",
         "role": "figure",
-        "sha256": "73e1b3e562718875d4f7d46343f734e5261fa47fef7569e5cb5468e40c62e3a3"
+        "sha256": "73e1b3e562718875d4f7d46343f734e5261fa47fef7569e5cb5468e40c62e3a3",
+        "size_bytes": 86213,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/measure_live_latency.py",
+        "media_type": "text/csv",
         "path": "evidence/live_latency.csv",
         "role": "supporting_evidence",
-        "sha256": "876ed3202dcd38b7dba734a3bdc074df6638120324a83df4a2dba02877b1b1dd"
+        "sha256": "876ed3202dcd38b7dba734a3bdc074df6638120324a83df4a2dba02877b1b1dd",
+        "size_bytes": 253,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/measure_live_latency.py",
+        "media_type": "application/json",
         "path": "evidence/live_latency.json",
         "role": "supporting_evidence",
-        "sha256": "3bccc85e1af970ce8ef5896df3b05c67983e0ecc1ebee49162bdfbc5d6af98d1"
+        "sha256": "3bccc85e1af970ce8ef5896df3b05c67983e0ecc1ebee49162bdfbc5d6af98d1",
+        "size_bytes": 930,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/benchmark_protocol.py",
+        "media_type": "text/csv",
         "path": "evidence/protocol_benchmark.csv",
         "role": "supporting_evidence",
-        "sha256": "1f99217e48789f6667924c25067dec6fa516a232e4a7c721b905a94ed63ff15f"
+        "sha256": "1f99217e48789f6667924c25067dec6fa516a232e4a7c721b905a94ed63ff15f",
+        "size_bytes": 921,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/run_scale_tier.py",
+        "media_type": "application/json",
         "path": "evidence/scale_T1.json",
         "role": "supporting_evidence",
-        "sha256": "b5f2e40845414a28d065f4857a7b2c0665d1fac9caa79919ef083a0140e24bc0"
+        "sha256": "b5f2e40845414a28d065f4857a7b2c0665d1fac9caa79919ef083a0140e24bc0",
+        "size_bytes": 578,
+        "tracked": true
       },
       {
+        "generated_by": "scripts/run_scale_tier.py",
+        "media_type": "text/csv",
         "path": "evidence/scale_results.csv",
         "role": "supporting_evidence",
-        "sha256": "1b3750b82d5b5c08e9c49bf2746e802aa97d3d049dbb5331659f06903039f66e"
+        "sha256": "1b3750b82d5b5c08e9c49bf2746e802aa97d3d049dbb5331659f06903039f66e",
+        "size_bytes": 472,
+        "tracked": true
       }
     ],
     "scenario_set": [
@@ -191,10 +275,10 @@
     ]
   },
   "code": {
-    "attestation_base_commit": "c1166cf07496085ad2d0cc883f67f976b3b903ec",
-    "implementation_commit": "f08732253b5fd6088444a20cac1ddf59f82c1254",
+    "attestation_base_commit": "146453b07fd74a21f4ed316fbe80d7e1ee519033",
+    "implementation_commit": "146453b07fd74a21f4ed316fbe80d7e1ee519033",
     "note": "The implementation commit produced the run log; the attestation base may add evidence/ artifacts only.",
-    "worktree_dirty": false
+    "worktree_dirty": true
   },
   "commands": {
     "benchmark_aggregate": "python scripts/aggregate_benchmark.py --input benchmark_results.csv --output evidence/benchmark_aggregate.csv --figures-dir evidence/figures",
@@ -240,7 +324,7 @@
     "status": "unexecuted",
     "transformation_method": null
   },
-  "generated_at_utc": "2026-09-13T23:27:26.825134+00:00",
+  "generated_at_utc": "2026-09-13T23:36:48.859910+00:00",
   "live_experiments": {
     "benchmark_run_provenance": {
       "artifact": "evidence/experiment_runs.jsonl",
@@ -272,10 +356,12 @@
   "manifest_version": 4,
   "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
   "release": {
-    "blockers": [],
-    "eligible_for_final_release": true,
+    "blockers": [
+      "worktree is dirty"
+    ],
+    "eligible_for_final_release": false,
     "policy": "Development mode records blockers; final mode exits without overwriting the manifest when any blocker exists.",
-    "requested_mode": "final"
+    "requested_mode": "development"
   },
   "runtime": {
     "dependencies": [

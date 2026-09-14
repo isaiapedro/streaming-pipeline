@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from data.scenarios.definitions import SCENARIOS
+from data.scenarios.definitions import Scenario
 from schema import vitals_pb2
 from scripts.aggregate_benchmark import aggregate, load_rows, validate_full_matrix, write_aggregate
 from scripts.benchmark_protocol import _benchmark_payload, _wire_overhead_table
@@ -23,6 +24,7 @@ from scripts.run_benchmark import (
     DEFAULT_STABLE_DURATION_S,
     scenario_for_benchmark,
 )
+import scripts.run_benchmark as benchmark_runner
 from scripts.run_scale_tier import machine_context, write_result
 
 ROOT = Path(__file__).parents[2]
@@ -86,6 +88,140 @@ def test_stable_baseline_selector_applies_24_hour_protocol_only_to_stable_scenar
     assert sepsis is SCENARIOS["sepsis_progression"]
 
 
+def _fake_benchmark_results():
+    metrics = {
+        "detection_run_rate": 1.0,
+        "false_alarm_run_probability": None,
+        "scoring_detection_latency_ms": 1.0,
+        "alarm_observation_count": 1,
+        "alarm_episode_count": 1,
+        "alarm_episode_rate_per_patient_day": 1.0,
+        "time_in_alarm_ms": 1,
+        "time_in_alarm_pct": 1.0,
+        "window_completeness_pct": None,
+    }
+    return {approach: dict(metrics) for approach in ("A", "B", "C")}
+
+
+def test_benchmark_journal_recovers_completed_cells_and_retries_failure(tmp_path, monkeypatch):
+    scenario = Scenario("short", "test", 1, 0, 0, {}, "none")
+    monkeypatch.setattr(benchmark_runner, "SCENARIOS", {"short": scenario})
+    monkeypatch.setattr(benchmark_runner, "_git_state", lambda ignored=(): ("commit", False))
+    calls = 0
+
+    def interrupt(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise KeyboardInterrupt("simulated interruption")
+        return _fake_benchmark_results()
+
+    monkeypatch.setattr(benchmark_runner, "_simulate_run", interrupt)
+    result_path = tmp_path / "results.csv"
+    log_path = tmp_path / "runs.jsonl"
+    journal_path = tmp_path / "runs.journal"
+    with pytest.raises(KeyboardInterrupt):
+        benchmark_runner.run_benchmark(
+            (1,), (2, 4), result_path, log_path, 1, 10_000, journal_path=journal_path
+        )
+    assert journal_path.exists()
+    assert not result_path.exists()
+
+    monkeypatch.setattr(benchmark_runner, "_simulate_run", lambda *args, **kwargs: _fake_benchmark_results())
+    benchmark_runner.run_benchmark(
+        (1,), (2, 4), result_path, log_path, 1, 10_000, resume=True, journal_path=journal_path
+    )
+    assert not journal_path.exists()
+    assert len(list(csv.DictReader(result_path.open()))) == 6
+    logs = [json.loads(line) for line in log_path.read_text().splitlines()]
+    assert len(logs) == 2
+    assert logs[0]["attempt_number"] == 1
+    assert logs[1]["attempt_number"] == 2
+    assert logs[1]["prior_failed_attempts"] == 1
+    assert logs[1]["recovered_from_interruption"] is True
+
+
+def test_benchmark_journal_repairs_only_a_torn_final_record(tmp_path):
+    path = tmp_path / "journal.jsonl"
+    entry = {
+        "protocol_hash": "protocol",
+        "log": {"run_id": "one", "status": "failed", "attempt_number": 1},
+        "rows": [],
+    }
+    benchmark_runner._append_journal(path, entry)
+    with path.open("ab") as handle:
+        handle.write(b'{"protocol_hash":"protocol"')
+    assert benchmark_runner._read_journal(path, "protocol") == [entry]
+    assert path.read_bytes().endswith(b"\n")
+
+
+def test_benchmark_journal_rejects_invalid_completed_rows(tmp_path):
+    path = tmp_path / "journal.jsonl"
+    benchmark_runner._append_journal(
+        path,
+        {
+            "protocol_hash": "protocol",
+            "log": {"run_id": "one", "status": "completed", "attempt_number": 1},
+            "rows": [{"run_id": "one", "approach": "A"}],
+        },
+    )
+    with pytest.raises(RuntimeError, match="invalid result rows"):
+        benchmark_runner._read_journal(path, "protocol")
+
+
+def test_benchmark_resume_rebuilds_outputs_after_finalization_interruption(tmp_path, monkeypatch):
+    scenario = Scenario("short", "test", 1, 0, 0, {}, "none")
+    monkeypatch.setattr(benchmark_runner, "SCENARIOS", {"short": scenario})
+    monkeypatch.setattr(benchmark_runner, "_git_state", lambda ignored=(): ("commit", False))
+    monkeypatch.setattr(benchmark_runner, "_simulate_run", lambda *args, **kwargs: _fake_benchmark_results())
+    result_path = tmp_path / "results.csv"
+    log_path = tmp_path / "runs.jsonl"
+    journal_path = tmp_path / "runs.journal"
+    real_finalize = benchmark_runner._atomic_write_outputs
+    monkeypatch.setattr(
+        benchmark_runner,
+        "_atomic_write_outputs",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("simulated finalization crash")),
+    )
+    with pytest.raises(RuntimeError, match="finalization crash"):
+        benchmark_runner.run_benchmark(
+            (1,), (2,), result_path, log_path, 1, 10_000, journal_path=journal_path
+        )
+    assert journal_path.exists()
+
+    monkeypatch.setattr(benchmark_runner, "_atomic_write_outputs", real_finalize)
+    monkeypatch.setattr(
+        benchmark_runner,
+        "_simulate_run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("completed cell reran")),
+    )
+    benchmark_runner.run_benchmark(
+        (1,), (2,), result_path, log_path, 1, 10_000, resume=True, journal_path=journal_path
+    )
+    assert len(list(csv.DictReader(result_path.open()))) == 3
+    assert len(log_path.read_text().splitlines()) == 1
+
+
+def test_benchmark_resume_rejects_protocol_drift(tmp_path, monkeypatch):
+    scenario = Scenario("short", "test", 1, 0, 0, {}, "none")
+    monkeypatch.setattr(benchmark_runner, "SCENARIOS", {"short": scenario})
+    monkeypatch.setattr(benchmark_runner, "_git_state", lambda ignored=(): ("commit", False))
+    journal_path = tmp_path / "runs.journal"
+    benchmark_runner._append_journal(
+        journal_path,
+        {
+            "protocol_hash": "different",
+            "log": {"run_id": "cell", "status": "failed", "attempt_number": 1},
+            "rows": [],
+        },
+    )
+    with pytest.raises(RuntimeError, match="protocol does not match"):
+        benchmark_runner.run_benchmark(
+            (1,), (2,), tmp_path / "results.csv", tmp_path / "runs.jsonl", 1, 10_000,
+            resume=True, journal_path=journal_path,
+        )
+
+
 def _write_artifact_pair(tmp_path: Path, stable_duration_s: int = 86_400) -> tuple[Path, Path]:
     benchmark_path = tmp_path / "benchmark.csv"
     run_log_path = tmp_path / "runs.jsonl"
@@ -108,8 +244,11 @@ def _write_artifact_pair(tmp_path: Path, stable_duration_s: int = 86_400) -> tup
                             "duration_s": duration,
                         })
                     log_handle.write(json.dumps({
+                        "provenance_schema_version": 2,
+                        "protocol_sha256": "protocol",
                         "run_id": run_id,
                         "status": "completed",
+                        "attempt_number": 1,
                         "worktree_dirty": False,
                         "git_commit": "implementation",
                     }) + "\n")

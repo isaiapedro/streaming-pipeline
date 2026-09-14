@@ -253,6 +253,13 @@ def benchmark_artifacts(
             errors.append("raw benchmark and run log contain different run_id sets")
         if any(entry.get("status") != "completed" for entry in logs):
             errors.append("run log contains incomplete or failed cells")
+        if any(entry.get("provenance_schema_version") != 2 for entry in logs):
+            errors.append("run log does not use crash-recoverable provenance schema version 2")
+        if any(not isinstance(entry.get("attempt_number"), int) or entry["attempt_number"] < 1 for entry in logs):
+            errors.append("run log contains an invalid or missing attempt number")
+        protocol_hashes = {entry.get("protocol_sha256") for entry in logs}
+        if len(protocol_hashes) != 1 or None in protocol_hashes:
+            errors.append("run log must identify exactly one benchmark protocol hash")
         if any(entry.get("worktree_dirty") is not False for entry in logs):
             errors.append("run log was generated from a dirty or unknown worktree")
         observed_commits = {entry.get("git_commit") for entry in logs}

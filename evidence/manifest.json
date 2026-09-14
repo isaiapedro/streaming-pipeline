@@ -22,7 +22,7 @@
         "path": "evidence/experiment_runs.jsonl",
         "record_count": 150,
         "role": "run_provenance",
-        "sha256": "3574474fb45e33c735ad0090100980dab688212a080dcbf974749bf736d0d4b3",
+        "sha256": "36b222532b1dfccd470f3469bc5dec04075c8c368c800aaa8d91571974a01cc3",
         "tracked": true
       },
       "validation_errors": [],
@@ -90,8 +90,8 @@
         "media_type": "application/octet-stream",
         "path": "evidence/experiment_runs.jsonl",
         "role": "run_provenance",
-        "sha256": "3574474fb45e33c735ad0090100980dab688212a080dcbf974749bf736d0d4b3",
-        "size_bytes": 70961,
+        "sha256": "36b222532b1dfccd470f3469bc5dec04075c8c368c800aaa8d91571974a01cc3",
+        "size_bytes": 101862,
         "tracked": true
       },
       {
@@ -277,10 +277,10 @@
     ]
   },
   "code": {
-    "attestation_base_commit": "044f8eb8050ce44452fc22dea3dd3b89005d10a5",
-    "implementation_commit": "70ff39ffe0725f4d89d663c5bcbef6d3c2beaefb",
+    "attestation_base_commit": "d71793c954ebc043a47a245b2f0ac21589fa6a2a",
+    "implementation_commit": "d71793c954ebc043a47a245b2f0ac21589fa6a2a",
     "note": "The implementation commit produced the run log; the attestation base may add evidence/ artifacts only.",
-    "worktree_dirty": false
+    "worktree_dirty": true
   },
   "commands": {
     "benchmark_aggregate": "python scripts/aggregate_benchmark.py --input benchmark_results.csv --output evidence/benchmark_aggregate.csv --figures-dir evidence/figures",
@@ -294,6 +294,7 @@
     "outbox_health": "python3 scripts/audit_outbox.py --database .runtime/influx_outbox.sqlite3 --output evidence/outbox_health.json --require-healthy",
     "protocol": "python scripts/benchmark_protocol.py --n 100 --out evidence/protocol_benchmark.csv --skip-restarts",
     "scale_tier": "python scripts/run_scale_tier.py --tier T1 --duration 10 --pull-timeout 0.1 --nats-url nats://localhost:4222 --csv-out evidence/scale_results.csv --json-out evidence/scale_T1.json",
+    "storage_reconciliation": "python3 scripts/reconcile_storage.py --database .runtime/influx_outbox.sqlite3 --stored-count COUNT --output evidence/storage_reconciliation.json --require-complete",
     "tests": "python3 -m pytest -q",
     "traceability_audit_export": "python3 scripts/audit_traceability.py --input-csv /approved/export.csv --output evidence/traceability_audit.json --require-complete",
     "traceability_audit_live": "python3 scripts/audit_traceability.py --live --range 1h --output evidence/traceability_audit.json --require-complete"
@@ -326,7 +327,7 @@
     "status": "unexecuted",
     "transformation_method": null
   },
-  "generated_at_utc": "2026-09-13T23:42:20.198946+00:00",
+  "generated_at_utc": "2026-09-14T00:55:38.303247+00:00",
   "live_experiments": {
     "benchmark_run_provenance": {
       "artifact": "evidence/experiment_runs.jsonl",
@@ -349,19 +350,26 @@
       "restart_dependent_dimensions": "unavailable (--skip-restarts)",
       "status": "executed_partial"
     },
+    "storage_reconciliation": {
+      "artifact": null,
+      "privacy": "aggregate source/outbox/delivery/storage counts only",
+      "status": "unexecuted"
+    },
     "stored_traceability_audit": {
       "artifact": null,
       "privacy": "aggregate tag-presence counts only",
       "status": "unexecuted"
     }
   },
-  "manifest_version": 4,
+  "manifest_version": 5,
   "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
   "release": {
-    "blockers": [],
-    "eligible_for_final_release": true,
+    "blockers": [
+      "worktree is dirty"
+    ],
+    "eligible_for_final_release": false,
     "policy": "Development mode records blockers; final mode exits without overwriting the manifest when any blocker exists.",
-    "requested_mode": "final"
+    "requested_mode": "development"
   },
   "runtime": {
     "dependencies": [

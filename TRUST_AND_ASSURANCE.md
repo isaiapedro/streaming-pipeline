@@ -332,18 +332,18 @@ remain incomplete.
 - Final manifest generation fails before overwriting evidence when cleanliness,
   dependency, artifact, or attestation blockers exist.
 
-Current evidence is development evidence and must be regenerated from the
-selected clean implementation/evidence chain. Protocol restart dimensions,
-successful-storage latency, scale T2–T4, external-reference validation, live
-traceability, and Grafana/alert evidence remain `unexecuted` or partial.
+The bounded offline evidence package has a clean, portable final attestation.
+Protocol restart dimensions, successful-storage latency, scale T2–T4,
+external-reference validation, live traceability, and Grafana/alert evidence
+remain `unexecuted` or partial and are not covered by that attestation.
 
 ## 11. Accountability and governance
 
 | Authority | Accountability function |
 | --- | --- |
 | `BEHAVIOR.md` | Defines mandatory privacy, runtime, and evidence behavior |
-| `DECISIONS.md` | Records accepted architecture/scientific choices and limitations |
-| `IMPLEMENTED.md` | Records completed work, historical verification, and owner decisions |
+| `DECISIONS.md` | Records accepted decisions, open owner decisions, gaps, and claim limitations |
+| `IMPLEMENTED.md` | Records completed work and historical verification |
 | `IMPLEMENTATION_BLUEPRINT.md` | Assigns remaining work and final release gates |
 | `OPERATIONS_AND_REPRODUCIBILITY.md` | Provides canonical commands, maintenance, recovery, and evidence procedure |
 | `TELEMETRY_CONTRACT.md` | Defines metadata, persistence, logging, retention, credential, and alert boundaries |
@@ -401,7 +401,8 @@ The following gaps are explicitly tracked rather than hidden:
 - owner-confirmed credential rotation;
 - governed Grafana bucket configuration, genuine onset-to-detection view, live
   rendering, and approved notification receipt;
-- tracked-secret release scan and independent clean-clone reproduction.
+- final controlled reruns of any live gates affected by later implementation
+  changes.
 
 The authoritative task ownership and sequencing for these gaps is maintained in
 `IMPLEMENTATION_BLUEPRINT.md`.

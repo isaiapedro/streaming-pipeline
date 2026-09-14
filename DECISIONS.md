@@ -1,4 +1,9 @@
-# Architectural Decisions
+# Decisions and Open Gaps
+
+This document is the authority for accepted scientific and architectural
+decisions, decisions still requiring an accountable owner, and unresolved
+implementation or execution gaps. Completed work belongs in `IMPLEMENTED.md`;
+task sequencing belongs in `IMPLEMENTATION_BLUEPRINT.md`.
 
 ## 2026-09-13 — Documentation uses durable authorities, not milestone reports
 
@@ -123,3 +128,80 @@ on `alarms.>` with a seven-day maximum age. A JetStream publish acknowledgement
 precedes acknowledgement of the triggering vital. Its NEWS2 window is
 memory-only, no notification consumer is implemented, and no external alert
 delivery or restart-continuity claim is made.
+
+## Resolved release decisions
+
+### 2026-09-13 — Offline evidence uses a two-commit attestation
+
+The measured implementation is frozen before evidence generation. A reviewed
+descendant commit may change only `evidence/` and the governed root
+`benchmark_results.csv`. Final mode verifies ancestry, changed paths, exact
+dependencies, run cleanliness, artifact tracking, hashes, and checksums before
+writing the attestation. The accepted chain is:
+
+- measured implementation: `70ff39ffe0725f4d89d663c5bcbef6d3c2beaefb`;
+- reviewed evidence base: `044f8eb8050ce44452fc22dea3dd3b89005d10a5`;
+- portable attestation: `edadcc6c8a1cad23311b8c6fdb804dcac94b4c58`.
+
+The attestation releases the bounded offline evidence package only. It is not
+approval for broader operational, external-validity, production, or clinical
+claims.
+
+## Decisions requiring an owner
+
+| ID | Owner | Decision required | Blocks |
+| --- | --- | --- | --- |
+| D2 | Dissertation author and methodology reviewer | Freeze dependence-aware paired estimands, Monte Carlo error, interval method, and treatment of non-detection | Inferential A/B/C comparison language |
+| D3 | Author and data-governance owner | Approve an independent reference source, licence/DUA, allowed transformations, and retained provenance | External distribution or realism claims |
+| D4 | Infrastructure owner | Approve the restart, interruption, replay, persistence, and fault-injection matrix; explicitly include or exclude production TLS and multi-broker Kafka | Broader V2 reliability claims |
+| D5 | Author and infrastructure owner | Freeze hardware, limits, duration, repetitions, and T2–T4 targets | Capacity claims beyond T1 |
+| D6 | Privacy and retention owner | Approve retention and verified deletion separately for streams, topics, Influx data, DLQs, alarms, logs, and aggregate evidence | Hosted retention/compliance claims |
+| D7 | Service and credential owner | Select the final Influx organization/bucket/access boundary and confirm historical token rotation without recording either token | Live storage and credential-safety claims |
+| D8 | Telemetry owner and operator | Freeze the reconciliation window, accounting rule, and acceptable discrepancy across broker input, outbox, writes, and stored points | Confirmed-storage and storage-latency claims |
+| D9 | Notification and privacy owner | Approve a synthetic-only destination, recipients, activation window, retained evidence, and teardown | Unpausing alerts or claiming delivery |
+| D10 | Author and methodology reviewer | Predeclare sensitivity ranges for clear hold, thresholds, cadence, freshness, profiles, drift, noise, and SpO2 scale | Robustness claims |
+| D11 | Safety and architecture owner | Keep cloud-to-local suppression out of scope or authorize a separate safety design | Any suppression implementation or claim |
+| D12 | Author and supervisor | Approve the evidence level and limitation wording for each headline result | Dissertation submission or public release |
+
+## Open implementation gaps
+
+- Benchmark provenance is not yet append-and-flush crash safe and lacks an
+  interrupted-run recovery protocol.
+- The analysis does not yet implement the frozen ADEMP/STRESS protocol,
+  crossed-seed dependence-aware paired inference, Monte Carlo error reporting,
+  non-detection sensitivity treatment, or predeclared sensitivity analysis.
+- Outbox identity is derived from exact output content rather than stable
+  source-message identity across configuration changes.
+- Influx retry lacks a governed maximum-attempt classification, terminal
+  quarantine, and privacy-safe operational advisory.
+- No single reconciliation artifact joins accepted broker inputs, outbox
+  pending/delivered state, successful writes, and stored Influx points.
+- Grafana still requires governed bucket parameterization and a genuine
+  onset-to-detection source/view.
+
+## Open execution and evidence gaps
+
+- Restart, interruption, replay, persistence, packet-loss, DLQ-deduplication,
+  maximum-delivery, and memory behavior lack one frozen final fault matrix.
+- Publish-to-successful-storage latency remains unexecuted.
+- T2–T4 runs remain unexecuted on approved, recorded hardware.
+- Independent external-reference validation remains unexecuted pending source
+  approval.
+- Final live traceability and broker/outbox/Influx reconciliation remain
+  unexecuted.
+- Grafana live query/render validation and approved notification delivery
+  remain unexecuted.
+- Retention/deletion verification and credential-rotation confirmation remain
+  owner-blocked.
+- The frozen `evidence/RESULTS.md` and `evidence/LIMITATIONS.md` still contain
+  pre-attestation wording about a dirty development run. Reconcile those
+  narratives with the final manifest during the next governed evidence
+  regeneration; do not edit frozen evidence without refreshing its attestation.
+
+## Claim boundary while gaps remain
+
+The current evidence supports V0 unit correctness, V1 synthetic simulation,
+and only the narrowly executed V2 local transport/security checks. It does not
+support V3 independent realism or V4 clinical validation. Do not describe the
+system as clinically safe, production ready, exactly once, end-to-end durable,
+retention compliant, or proven for 500 patients.

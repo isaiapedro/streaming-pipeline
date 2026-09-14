@@ -33,13 +33,12 @@ data from the Personal domain.
 
 ## Authorities
 
-- `DECISIONS.md`: accepted scientific and architectural standards.
+- `DECISIONS.md`: accepted standards, open owner decisions, and gap register.
 - `TELEMETRY_CONTRACT.md`: persistence, telemetry, privacy, retention, and
   alert rules.
 - `OPERATIONS_AND_REPRODUCIBILITY.md`: executable operator procedure.
 - `IMPLEMENTATION_BLUEPRINT.md`: remaining work, sequencing, and release
   gates.
-- `IMPLEMENTED.md`: consolidated implementation status, historical checks,
-  pending decisions, and unfinished work.
+- `IMPLEMENTED.md`: completed implementation and historical verification.
 - `TRUST_AND_ASSURANCE.md`: evidence-backed explanation of security, privacy,
   reliability, testing, traceability, accountability, and claim limitations.

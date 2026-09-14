@@ -25,9 +25,9 @@ row-level external reference data are prohibited from repository artifacts.
   storage, alarm, or outcome parity.
 - MQTT PUBACK proves local broker receipt, not durable DLQ archive. The local
   scorer's NEWS2 state is memory-only and no notification consumer exists.
-- The existing evidence bundle is development evidence: it was generated from
-  a dirty tree and the active `python-dotenv` version differs from its pin.
-  Current development-bundle checksums verify, but they are not final evidence.
+- The bounded offline evidence bundle has a clean, portable final attestation.
+  This closes the offline package gate only; the operational, external-data,
+  scale, storage, retention, and notification gates below remain open.
 - Release is still blocked by Agent 2, Agent 3, and coordinator gates below.
 
 ## Parallel worker queues

@@ -338,9 +338,10 @@ acknowledgement semantics, infrastructure profiles, evidence reproduction, and
 maintenance. Active remaining work and release sequencing are defined in
 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md).
 
-Implementation status, historical verification, and outstanding decisions are
-consolidated in [IMPLEMENTED.md](IMPLEMENTED.md). Accepted standards are recorded in
-[DECISIONS.md](DECISIONS.md), and runtime telemetry/privacy requirements remain
+Completed implementation and historical verification are consolidated in
+[IMPLEMENTED.md](IMPLEMENTED.md). Accepted decisions, owner decisions, and
+open gaps are recorded in [DECISIONS.md](DECISIONS.md), while runtime
+telemetry/privacy requirements remain
 in [TELEMETRY_CONTRACT.md](TELEMETRY_CONTRACT.md). The evidence-backed security,
 privacy, reliability, testing, traceability, accountability, and disclosure
 case is summarized in [TRUST_AND_ASSURANCE.md](TRUST_AND_ASSURANCE.md).

@@ -36,8 +36,8 @@ The repository must also work from an arbitrary clean-clone location.
 | Kafka validation comparison | `kafka_path/`, Compose `kafka` profile | Isolated Protobuf/Schema Registry producer, validator, manual-offset consumer, DLQ | Validation/acceptance/rejection/latency only; no Brain scoring, outbox, storage, or alarm parity |
 | InfluxDB telemetry | `brain/influx_writer.py` | Persists records to a private SQLite WAL outbox, then delivers retryable batches with provenance tags | Local outbox durability and idempotent replay; remote Influx availability is asynchronous |
 | Grafana comparison | `grafana/provisioning/` | Displays A/B/C results and version metadata; alert rule is paused | Validate against final telemetry before release |
-| Offline benchmark | `scripts/run_benchmark.py` | Runs six scenarios across crossed signal/noise seeds for A/B/C, including the 24-hour stable baseline | Deterministic development evidence exists; final mode requires a clean identified commit |
-| Aggregation and figures | `scripts/aggregate_benchmark.py` | Validates the 450-row result matrix and generates aggregates/figures | Current raw input conforms; release regeneration remains blocked by provenance/environment gates |
+| Offline benchmark | `scripts/run_benchmark.py` | Runs six scenarios across crossed signal/noise seeds for A/B/C, including the 24-hour stable baseline | Clean portable offline evidence is attested; broader scientific gaps remain separate |
+| Aggregation and figures | `scripts/aggregate_benchmark.py` | Validates the 450-row result matrix and generates aggregates/figures | The tracked raw input and current aggregate conform to the frozen matrix contract |
 | Protocol benchmark | `scripts/benchmark_protocol.py` | Compares local NATS and MQTT transport dimensions | Some dimensions require container restart access |
 | Live latency | `scripts/measure_live_latency.py` | Measures publish-to-consume and optional successful-storage latency | Storage is unexecuted when `--skip-storage` is used |
 | Scale tiers | `scripts/run_scale_tier.py` | Exercises isolated NATS transport from T1 through T4 | Transport-only; not full scoring/storage scale |
@@ -644,8 +644,8 @@ A dissertation/demo evidence release is ready only when:
 - another clean environment reproduces the aggregate tables and figures;
 - claims remain at or below their verified V0–V4 evidence level.
 
-Completed implementation and pending decisions are in `IMPLEMENTED.md`;
-remaining work and release gates are in `IMPLEMENTATION_BLUEPRINT.md`;
-accepted standards are in `DECISIONS.md`; runtime telemetry and retention
+Completed implementation and verification are in `IMPLEMENTED.md`; accepted
+decisions, owner decisions, and gaps are in `DECISIONS.md`; remaining work and
+release gates are in `IMPLEMENTATION_BLUEPRINT.md`; runtime telemetry and retention
 rules are in `TELEMETRY_CONTRACT.md`; evidence-specific limitations are in
 `evidence/LIMITATIONS.md`.

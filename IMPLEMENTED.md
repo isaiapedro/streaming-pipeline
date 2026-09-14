@@ -70,6 +70,14 @@ hospital-scale capacity, or suitability for real patient data.
   the governed root `benchmark_results.csv` fail closed.
 - The small synthetic raw benchmark is versioned so tests and evidence checks
   work from a fresh clone without hidden local inputs.
+- Benchmark execution uses a versioned per-cell journal. Every completed or
+  failed attempt is appended, flushed, and `fsync`ed before the next cell.
+- Resume validates the complete protocol fingerprint, repairs only a torn final
+  journal record, skips durable completed cells, retries failed cells, and
+  atomically rebuilds the public result and run-log files.
+- Run provenance records the protocol hash, schema version, attempt number,
+  prior failed-attempt count, and whether recovery occurred without retaining
+  arbitrary exception messages.
 
 ## Transport and schema
 
@@ -81,11 +89,14 @@ hospital-scale capacity, or suitability for real patient data.
 - Provisioning is repeat-safe, non-interactive, working-directory independent,
   and verifies the complete live contract after creating or repairing it.
 - Invalid NATS records are acknowledged only after confirmed publication of a
-  structured Protobuf dead-letter envelope.
+  structured Protobuf dead-letter envelope. Its de-duplication identity uses
+  the stable source stream sequence, so redelivery is idempotent without
+  collapsing distinct identical publications.
 - The local scorer waits for the `ALARMS` JetStream publish acknowledgement
   before acknowledging its triggering vital.
 - MQTT uses the bounded `vitals/#` hierarchy, QoS 1 publishing, manual source
-  acknowledgement, and confirmed DLQ PUBACK ordering.
+  acknowledgement, and confirmed DLQ PUBACK ordering. MQTT rejection envelopes
+  identify the MQTT transport and original source topic.
 - Kafka is an isolated validation-only comparison using fixed topics,
   canonical Protobuf framing, patient-key validation, manual commits, and a
   structured DLQ.
@@ -93,8 +104,14 @@ hospital-scale capacity, or suitability for real patient data.
   compatible schemas are accepted and breaking schemas are rejected.
 - Kafka polling distinguishes idle polls from consumed poison records, and
   commits only after the governed handler or confirmed DLQ side effect.
+- Only Schema Registry error `40403` is classified as an unknown-schema poison
+  record; other registry 404 responses remain retriable infrastructure or
+  configuration failures and leave the source offset uncommitted.
 - Topic parsing supports comma-containing policies such as
   `cleanup.policy=compact,delete` and rejects contract drift.
+- The checked-in Python Protobuf descriptor is tested against the canonical
+  `.proto`, and NATS verification covers delivery/replay policy drift for every
+  declared consumer.
 
 ## Durable telemetry and recovery
 
@@ -107,7 +124,18 @@ hospital-scale capacity, or suitability for real patient data.
 - Influx delivery is asynchronous. Failed writes remain locally durable with
   attempt counts, next-attempt timestamps, and bounded exponential delay.
 - Retry state survives process restart.
-- Content-derived identifiers suppress exact duplicate derived records.
+- NATS stream sequence identity and MQTT canonical payload identity are hashed
+  into durable source receipts. Receipts survive successful delivery and
+  process restart, so redelivery cannot create a second derived batch after a
+  threshold/configuration change.
+- Duplicate receipt handling rolls back tentative NEWS2 and batch-cadence state
+  before source acknowledgement.
+- Retriable failures use bounded exponential delay and a configurable maximum
+  attempt count. Non-retriable HTTP failures, or exhausted retriable failures,
+  move to private terminal quarantine; logs expose only a safe code and count.
+- Transactional counters retain accepted-source, derived-enqueued, delivered,
+  and quarantined totals. `scripts/reconcile_storage.py` checks those balances
+  against a matching logical-record count from Influx without exposing rows.
 - Acknowledgement is consistently documented as local durable handoff, not
   confirmed remote Influx storage.
 
@@ -140,6 +168,11 @@ hospital-scale capacity, or suitability for real patient data.
   telemetry so labels match their actual sources.
 - Dashboard tests cover datasource identity, filters, TLS verification,
   environment placeholders, and the paused alert default.
+- Dashboard and alert bucket values are governed templates. The renderer
+  validates `INFLUX_BUCKET`, validates the complete input set before writing,
+  and creates a complete five-file provisioning bundle under `.runtime`
+  without embedding credentials. The bundle includes `dashboard.yml`, so
+  Grafana can discover the rendered dashboards.
 - The representative trajectory displays all five scoped signals, B/C NEWS2,
   ground-truth onset, qualifying post-onset detection, and non-detection.
 - Architecture, evidence, scale, protocol, and traceability status figures
@@ -151,7 +184,9 @@ hospital-scale capacity, or suitability for real patient data.
 - Academic ports `19092` and `18081` are allocated in the root Registry for
   Kafka and Schema Registry; all published development ports are loopback-only.
 - Compose profiles render successfully and support isolated NATS, secure NATS,
-  MQTT, Kafka, Schema Registry, Influx, and Grafana workflows.
+  MQTT, Kafka, and Schema Registry services. InfluxDB and Grafana remain
+  explicitly external services configured through the documented runtime
+  environment and rendered provisioning bundle.
 - Direct Python dependencies are exactly pinned and resolve without conflicts.
 - Scripts are project-root aware and avoid caller-working-directory
   assumptions.
@@ -165,6 +200,10 @@ hospital-scale capacity, or suitability for real patient data.
 
 ## Verification completed
 
+- Earlier integrated development-tree suite: **237 passed, 5 explicitly skipped**.
+- Current integrated development-tree suite: **239 passed, 5 explicitly skipped**.
+- The post-attestation Agent 1 regression set passed **75 tests**, with one
+  live Kafka test explicitly skipped because its broker was unavailable.
 - Isolated pinned-environment suite: **211 passed, 5 explicitly skipped**.
 - Fresh-clone pinned-environment suite: **211 passed, 5 explicitly skipped**.
 - The skipped tests are opt-in live-infrastructure tests, not silent passes.
@@ -184,6 +223,33 @@ hospital-scale capacity, or suitability for real patient data.
 - The tracked raw benchmark hash matches the final manifest.
 - Final evidence mode passed with exact dependencies, no evidence-package
   blockers, and all publishable artifacts tracked.
+- The post-audit Agent 3 persistence, reconciliation, privacy, and Grafana
+  regression set passed **28 tests**. Reconciliation now reports an old or
+  unmigrated outbox schema as incomplete instead of crashing, and rendered
+  Grafana output includes its dashboard provider. Live Influx/Grafana evidence
+  remains due.
+- Required live NATS, MQTT, and Kafka/Schema Registry integration tests passed
+  together (**5 passed, no skips**). The isolated secure-NATS verifier also
+  passed authenticated TLS and rejected anonymous, wrong-password, and
+  untrusted-CA clients.
+
+## Agent 2 acceptance checkpoint
+
+- Implementation commit: `1a8af51` (`feat: add crash-recoverable benchmark
+  provenance`).
+- Focused command:
+  `/tmp/academic-release-venv/bin/python -m pytest brain/tests/test_evidence_tools.py -q`.
+- Focused result: **22 passed**.
+- Integrated command:
+  `/tmp/academic-release-venv/bin/python -m pytest -q`.
+- Integrated result: **237 passed, 5 opt-in live-infrastructure tests skipped**.
+- Static checks: Python compilation and `git diff --check` passed.
+- Covered recovery cases: completed-cell reuse, failed-cell retry, torn-final-
+  append repair, interrupted finalization rebuild, protocol-drift refusal,
+  attempt-sequence validation, and invalid-result-row refusal.
+- Publish-to-storage, protocol restart, T2–T4, external-reference, and
+  inferential-analysis extensions were not fabricated. Their owner decisions
+  and execution status remain authoritative in `DECISIONS.md`.
 
 ## Frozen evidence identity
 

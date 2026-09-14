@@ -34,8 +34,8 @@
         "name": "bucket",
         "label": "Bucket",
         "type": "constant",
-        "query": "vitals",
-        "current": { "value": "vitals", "text": "vitals" },
+        "query": "__INFLUX_BUCKET__",
+        "current": { "value": "__INFLUX_BUCKET__", "text": "__INFLUX_BUCKET__" },
         "hide": 2
       }
     ]

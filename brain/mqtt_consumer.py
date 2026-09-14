@@ -13,6 +13,8 @@ separate `dlq/vitals/mqtt` topic.
 
 import asyncio
 import copy
+import hashlib
+import inspect
 import json
 import logging
 import signal
@@ -126,7 +128,14 @@ async def _handle_delivery(
     async def reject(error: ValidationError) -> None:
         info = client.publish(
             "dlq/vitals/mqtt",
-            dead_letter(raw, error, topic, pipeline_version=PIPELINE_VERSION),
+            dead_letter(
+                raw,
+                error,
+                topic,
+                pipeline_version=PIPELINE_VERSION,
+                source_transport="mqtt",
+                source_topic=topic,
+            ),
             qos=1,
         )
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
@@ -223,7 +232,10 @@ async def _process(
             ))
 
     try:
-        await _durable_handoff(writer, records)
+        digest = hashlib.sha256((source_subject or "").encode() + b"\0" + raw).hexdigest()
+        accepted = await _durable_handoff(
+            writer, records, source_message_id=f"mqtt:payload:{digest}"
+        )
     except Exception:
         if previous_state is None:
             ews_states.pop(patient_id, None)
@@ -234,15 +246,33 @@ async def _process(
         else:
             batch_scheduler._last_tick[patient_id] = previous_tick
         raise
+    if not accepted:
+        if previous_state is None:
+            ews_states.pop(patient_id, None)
+        else:
+            ews_states[patient_id] = previous_state
+        if previous_tick is None:
+            batch_scheduler._last_tick.pop(patient_id, None)
+        else:
+            batch_scheduler._last_tick[patient_id] = previous_tick
 
 
-async def _durable_handoff(writer: InfluxWriter, records: list[VitalRecord | AlarmRecord]) -> None:
+async def _durable_handoff(
+    writer: InfluxWriter,
+    records: list[VitalRecord | AlarmRecord],
+    *,
+    source_message_id: str | None = None,
+) -> bool:
     enqueue_many = getattr(writer, "enqueue_many", None)
     if enqueue_many is not None:
-        await enqueue_many(records)
-        return
+        if "source_message_id" in inspect.signature(enqueue_many).parameters:
+            result = await enqueue_many(records, source_message_id=source_message_id)
+        else:
+            result = await enqueue_many(records)
+        return result is not False
     for record in records:
         await writer.enqueue(record)
+    return True
 
 
 if __name__ == "__main__":

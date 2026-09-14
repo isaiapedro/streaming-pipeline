@@ -26,7 +26,8 @@ from config.settings import (
     INFLUX_URL, INFLUX_TOKEN, INFLUX_ORG, INFLUX_BUCKET,
     INFLUX_TIMEOUT_MS,
     FLUSH_INTERVAL_S, FLUSH_BUFFER_SIZE, INFLUX_OUTBOX_PATH,
-    INFLUX_OUTBOX_MAX_RECORDS, INFLUX_RETRY_BASE_S, INFLUX_RETRY_MAX_S,
+    INFLUX_OUTBOX_MAX_RECORDS, INFLUX_OUTBOX_MAX_ATTEMPTS,
+    INFLUX_RETRY_BASE_S, INFLUX_RETRY_MAX_S,
 )
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,14 @@ def _safe_error_code(error: Exception) -> str:
     name = type(error).__name__
     status = getattr(error, "status", None) or getattr(error, "status_code", None)
     return f"{name}:status={int(status)}" if isinstance(status, int) else name
+
+
+def _is_retryable_error(error: Exception) -> bool:
+    """Classify remote failures without inspecting or retaining error text."""
+    status = getattr(error, "status", None) or getattr(error, "status_code", None)
+    if not isinstance(status, int):
+        return True
+    return status in {408, 409, 425, 429} or status >= 500
 
 
 def _require_metadata(**values: str) -> None:
@@ -114,9 +123,11 @@ class InfluxWriter:
         *,
         outbox_path: str | Path = INFLUX_OUTBOX_PATH,
         max_records: int = INFLUX_OUTBOX_MAX_RECORDS,
+        max_attempts: int = INFLUX_OUTBOX_MAX_ATTEMPTS,
     ) -> None:
         self._outbox_path = Path(outbox_path)
         self._max_records = max_records
+        self._max_attempts = max_attempts
         self._lock = asyncio.Lock()
         self._flush_lock = asyncio.Lock()
         self._client: InfluxDBClientAsync | None = None
@@ -162,15 +173,28 @@ class InfluxWriter:
     async def enqueue(self, record: Record) -> None:
         await self.enqueue_many([record])
 
-    async def enqueue_many(self, records: Iterable[Record]) -> None:
-        """Atomically persist all records, or raise without persisting any."""
+    async def enqueue_many(
+        self,
+        records: Iterable[Record],
+        *,
+        source_message_id: str | None = None,
+    ) -> bool:
+        """Atomically persist a source's records; return false for a redelivery."""
         batch = list(records)
         if not batch:
-            return
+            return True
         async with self._lock:
             db = self._require_db()
+            source_key = _source_key(source_message_id) if source_message_id else None
+            if source_key and db.execute(
+                "SELECT 1 FROM source_receipts WHERE source_key=?", (source_key,)
+            ).fetchone():
+                return False
             current = self._pending_count(db)
-            encoded = [_encode_record(record) for record in batch]
+            encoded = [
+                _encode_record(record, source_key=source_key, record_index=index)
+                for index, record in enumerate(batch)
+            ]
             new_keys = {item[0] for item in encoded}
             existing = 0
             if new_keys:
@@ -185,15 +209,25 @@ class InfluxWriter:
                     f"Influx outbox capacity {self._max_records} would be exceeded; message remains unacked"
                 )
             with db:
+                before = db.total_changes
                 db.executemany(
                     """INSERT OR IGNORE INTO outbox
                        (event_key, record_type, payload, created_at_ms, attempts, next_attempt_ms)
                        VALUES (?, ?, ?, ?, 0, 0)""",
                     [(key, kind, payload, int(time.time() * 1000)) for key, kind, payload in encoded],
                 )
+                inserted = db.total_changes - before
+                if source_key:
+                    db.execute(
+                        "INSERT INTO source_receipts (source_key, accepted_at_ms) VALUES (?, ?)",
+                        (source_key, int(time.time() * 1000)),
+                    )
+                    self._increment_counter(db, "accepted_source_messages", 1)
+                self._increment_counter(db, "derived_records_enqueued", inserted)
             should_flush = self._pending_count(db) >= FLUSH_BUFFER_SIZE
         if should_flush:
             await self._flush()
+        return True
 
     async def _flush_loop(self) -> None:
         while True:
@@ -227,21 +261,42 @@ class InfluxWriter:
                     placeholders = ",".join("?" for _ in ids)
                     with db:
                         db.execute(f"DELETE FROM outbox WHERE id IN ({placeholders})", ids)
+                        self._increment_counter(db, "delivered_records", len(ids))
                 log.debug("Flushed %d records to InfluxDB", len(points))
             except Exception as exc:
+                retryable = _is_retryable_error(exc)
+                error_code = _safe_error_code(exc)
+                quarantined = 0
                 async with self._lock:
                     db = self._require_db()
                     with db:
-                        for row_id, _, _, attempts in rows:
+                        for row_id, kind, payload, attempts in rows:
+                            next_attempt = attempts + 1
+                            if not retryable or next_attempt >= self._max_attempts:
+                                db.execute(
+                                    """INSERT OR REPLACE INTO outbox_quarantine
+                                       (event_key, record_type, payload, attempts, error_code, quarantined_at_ms)
+                                       SELECT event_key, record_type, payload, ?, ?, ? FROM outbox WHERE id=?""",
+                                    (next_attempt, error_code, now_ms, row_id),
+                                )
+                                db.execute("DELETE FROM outbox WHERE id=?", (row_id,))
+                                quarantined += 1
+                                continue
                             retry_s = min(
                                 INFLUX_RETRY_MAX_S,
                                 INFLUX_RETRY_BASE_S * (2 ** min(attempts, 30)),
                             )
                             db.execute(
                                 "UPDATE outbox SET attempts=?, next_attempt_ms=?, last_error=? WHERE id=?",
-                                (attempts + 1, now_ms + int(retry_s * 1000), _safe_error_code(exc), row_id),
+                                (next_attempt, now_ms + int(retry_s * 1000), error_code, row_id),
                             )
-                log.error("InfluxDB write failed (%d records retained for retry): %s", len(rows), type(exc).__name__)
+                        if quarantined:
+                            self._increment_counter(db, "quarantined_records", quarantined)
+                retained = len(rows) - quarantined
+                log.error(
+                    "InfluxDB write failed (retained=%d quarantined=%d code=%s)",
+                    retained, quarantined, error_code,
+                )
 
     @property
     def pending_count(self) -> int:
@@ -259,6 +314,12 @@ class InfluxWriter:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA synchronous=FULL")
         self._db.execute("PRAGMA busy_timeout=5000")
+        existing_tables = {
+            row[0] for row in self._db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        accounting_complete = "outbox" not in existing_tables
         self._db.execute(
             """CREATE TABLE IF NOT EXISTS outbox (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -270,6 +331,42 @@ class InfluxWriter:
                 next_attempt_ms INTEGER NOT NULL DEFAULT 0,
                 last_error TEXT
             )"""
+        )
+        self._db.execute(
+            """CREATE TABLE IF NOT EXISTS source_receipts (
+                source_key TEXT PRIMARY KEY,
+                accepted_at_ms INTEGER NOT NULL
+            )"""
+        )
+        self._db.execute(
+            """CREATE TABLE IF NOT EXISTS outbox_quarantine (
+                event_key TEXT PRIMARY KEY,
+                record_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                attempts INTEGER NOT NULL,
+                error_code TEXT NOT NULL,
+                quarantined_at_ms INTEGER NOT NULL
+            )"""
+        )
+        self._db.execute(
+            """CREATE TABLE IF NOT EXISTS outbox_counters (
+                name TEXT PRIMARY KEY,
+                value INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
+        self._db.execute(
+            """CREATE TABLE IF NOT EXISTS outbox_meta (
+                name TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )"""
+        )
+        self._db.execute(
+            "INSERT OR IGNORE INTO outbox_meta (name, value) VALUES ('accounting_started_at_ms', ?)",
+            (str(int(time.time() * 1000)),),
+        )
+        self._db.execute(
+            "INSERT OR IGNORE INTO outbox_meta (name, value) VALUES ('historical_accounting_complete', ?)",
+            ("1" if accounting_complete else "0",),
         )
         # Earlier builds stored arbitrary exception text. Scrub legacy rows on
         # open so endpoints, query text, or credentials cannot survive locally.
@@ -305,11 +402,31 @@ class InfluxWriter:
     def _pending_count(db: sqlite3.Connection) -> int:
         return int(db.execute("SELECT COUNT(*) FROM outbox").fetchone()[0])
 
+    @staticmethod
+    def _increment_counter(db: sqlite3.Connection, name: str, amount: int) -> None:
+        db.execute(
+            """INSERT INTO outbox_counters (name, value) VALUES (?, ?)
+               ON CONFLICT(name) DO UPDATE SET value=value+excluded.value""",
+            (name, amount),
+        )
 
-def _encode_record(record: Record) -> tuple[str, str, str]:
+
+def _source_key(source_message_id: str) -> str:
+    if not isinstance(source_message_id, str) or not source_message_id.strip():
+        raise ValueError("source_message_id must be a non-empty string")
+    return hashlib.sha256(source_message_id.encode()).hexdigest()
+
+
+def _encode_record(
+    record: Record,
+    *,
+    source_key: str | None = None,
+    record_index: int = 0,
+) -> tuple[str, str, str]:
     kind = "alarm" if isinstance(record, AlarmRecord) else "vital"
     payload = json.dumps(asdict(record), sort_keys=True, separators=(",", ":"), allow_nan=False)
-    event_key = hashlib.sha256(f"{kind}:{payload}".encode()).hexdigest()
+    identity = f"source:{source_key}:record:{record_index}" if source_key else f"{kind}:{payload}"
+    event_key = hashlib.sha256(identity.encode()).hexdigest()
     return event_key, kind, payload
 
 

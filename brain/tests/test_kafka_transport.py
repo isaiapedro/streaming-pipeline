@@ -1,6 +1,11 @@
 """Broker-free contracts for the isolated Kafka/Schema Registry path."""
 
+import os
+import stat
+import subprocess
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 from confluent_kafka.schema_registry.error import SchemaRegistryError
@@ -10,6 +15,7 @@ from kafka_path.settings import KafkaSettings
 from kafka_path.topic_contracts import DLQ_TOPIC, VITALS_TOPIC
 from kafka_path.transport import (
     KafkaCodec,
+    KafkaDeliveryError,
     KafkaPollResult,
     KafkaVitalConsumer,
     KafkaVitalProducer,
@@ -48,10 +54,18 @@ class FakeMessage:
 
 
 class FakeProducer:
-    def __init__(self, operations=None, *, fail=False, delivery_error=None):
+    def __init__(
+        self,
+        operations=None,
+        *,
+        fail=False,
+        delivery_error=None,
+        flush_remaining=0,
+    ):
         self.operations = operations if operations is not None else []
         self.fail = fail
         self.delivery_error = delivery_error
+        self.flush_remaining = flush_remaining
         self.calls = []
 
     def produce(self, **kwargs):
@@ -63,7 +77,7 @@ class FakeProducer:
 
     def flush(self, timeout):
         self.operations.append("flush")
-        return 0
+        return self.flush_remaining
 
 
 class FakeConsumer:
@@ -186,6 +200,24 @@ def test_producer_serializes_protobuf_and_uses_patient_partition_key():
     assert call["headers"]["schema_version"] == b"1"
 
 
+@pytest.mark.parametrize(
+    ("raw_producer", "error_match"),
+    [
+        (FakeProducer(delivery_error=RuntimeError("broker rejected record")), "broker rejected"),
+        (FakeProducer(flush_remaining=1), "not delivered before timeout"),
+    ],
+)
+def test_producer_requires_confirmed_delivery(raw_producer, error_match):
+    producer = KafkaVitalProducer(
+        settings=_settings(),
+        producer=raw_producer,
+        codec=FakeCodec(encoded=b"encoded-vital"),
+    )
+
+    with pytest.raises(KafkaDeliveryError, match=error_match):
+        producer.publish(_vital_message())
+
+
 def test_valid_record_is_handled_before_synchronous_commit():
     operations = []
     message = FakeMessage(b"encoded-vital")
@@ -276,6 +308,29 @@ def test_dlq_failure_does_not_commit_source_offset():
     assert raw_consumer.commits == []
 
 
+@pytest.mark.parametrize(
+    "dlq_producer",
+    [
+        FakeProducer(delivery_error=RuntimeError("broker rejected DLQ")),
+        FakeProducer(flush_remaining=1),
+    ],
+)
+def test_unconfirmed_dlq_delivery_does_not_commit_source_offset(dlq_producer):
+    raw_consumer = FakeConsumer()
+    consumer = KafkaVitalConsumer(
+        {"P-001": {}},
+        _settings(),
+        consumer=raw_consumer,
+        dlq_producer=dlq_producer,
+        codec=FakeCodec(error=ValidationError("malformed_protobuf")),
+    )
+
+    with pytest.raises(KafkaDeliveryError):
+        consumer.process_record(FakeMessage(b"not-protobuf"), lambda _vital: None)
+
+    assert raw_consumer.commits == []
+
+
 def test_registry_outage_is_not_misclassified_as_poison_data():
     raw_consumer = FakeConsumer()
     dlq = FakeProducer()
@@ -288,6 +343,22 @@ def test_registry_outage_is_not_misclassified_as_poison_data():
         consumer.process_record(FakeMessage(b"framed"), lambda _vital: None)
     assert raw_consumer.commits == []
     assert dlq.calls == []
+
+
+def test_non_schema_registry_404_is_not_misclassified_as_poison_data():
+    raw_consumer = FakeConsumer()
+    dlq_producer = FakeProducer()
+    consumer = KafkaVitalConsumer(
+        {"P-001": {}}, _settings(), consumer=raw_consumer,
+        dlq_producer=dlq_producer,
+        codec=FakeCodec(error=SchemaRegistryError(404, 40401, "subject not found")),
+    )
+
+    with pytest.raises(SchemaRegistryError):
+        consumer.process_record(FakeMessage(b"encoded-vital"), lambda _vital: None)
+
+    assert dlq_producer.calls == []
+    assert raw_consumer.commits == []
 
 
 def test_unknown_registry_schema_id_is_dead_lettered_before_commit():
@@ -352,6 +423,61 @@ def test_kafka_environment_cannot_bypass_provisioned_topic_contract(monkeypatch)
     monkeypatch.setenv("KAFKA_VITALS_TOPIC", "unmanaged-topic")
     with pytest.raises(ValueError, match="fixed by the provisioned research contract"):
         KafkaSettings.from_env()
+
+
+def test_kafka_dlq_environment_cannot_bypass_provisioned_topic_contract(monkeypatch):
+    monkeypatch.setenv("KAFKA_DLQ_TOPIC", "unmanaged-dlq-topic")
+    with pytest.raises(ValueError, match="KAFKA_DLQ_TOPIC"):
+        KafkaSettings.from_env()
+
+
+def test_kafka_governed_topic_defaults_are_accepted_from_environment(monkeypatch):
+    monkeypatch.setenv("KAFKA_VITALS_TOPIC", "vitals.protobuf.v1")
+    monkeypatch.setenv("KAFKA_DLQ_TOPIC", "vitals.dlq.protobuf.v1")
+
+    settings = KafkaSettings.from_env()
+
+    assert settings.vitals_topic == "vitals.protobuf.v1"
+    assert settings.dlq_topic == "vitals.dlq.protobuf.v1"
+
+
+def test_kafka_topic_provisioning_runs_outside_repository(tmp_path):
+    project_root = Path(__file__).parents[2]
+    fake_docker = tmp_path / "docker"
+    fake_docker.write_text(
+        """#!/usr/bin/env python3
+import sys
+
+if "--describe" in sys.argv:
+    topic = sys.argv[sys.argv.index("--topic") + 1]
+    if topic == "vitals.protobuf.v1":
+        print("Topic: vitals.protobuf.v1 PartitionCount: 3 ReplicationFactor: 1 Configs: ")
+    else:
+        print(
+            "Topic: vitals.dlq.protobuf.v1 PartitionCount: 1 ReplicationFactor: 1 "
+            "Configs: cleanup.policy=compact,delete,retention.ms=86400000"
+        )
+"""
+    )
+    fake_docker.chmod(fake_docker.stat().st_mode | stat.S_IXUSR)
+    env = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "PYTHON_BIN": sys.executable,
+    }
+
+    result = subprocess.run(
+        ["bash", str(project_root / "scripts" / "create_kafka_topics.sh")],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Topic: vitals.protobuf.v1" in result.stdout
+    assert "Topic: vitals.dlq.protobuf.v1" in result.stdout
 
 
 def test_kafka_handler_must_finish_synchronously_before_commit():

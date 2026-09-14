@@ -31,15 +31,36 @@ def audit_outbox(path: Path, now_ms: int | None = None) -> dict:
                FROM outbox""",
             (now_ms,),
         ).fetchone()
+        tables = {
+            row[0] for row in database.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        quarantined = database.execute(
+            "SELECT COUNT(*) FROM outbox_quarantine"
+        ).fetchone()[0] if "outbox_quarantine" in tables else 0
+        accepted = database.execute(
+            "SELECT COUNT(*) FROM source_receipts"
+        ).fetchone()[0] if "source_receipts" in tables else 0
+        counters = dict(database.execute(
+            "SELECT name, value FROM outbox_counters"
+        ).fetchall()) if "outbox_counters" in tables else {}
+        metadata = dict(database.execute(
+            "SELECT name, value FROM outbox_meta"
+        ).fetchall()) if "outbox_meta" in tables else {}
     finally:
         database.close()
     mode = os.stat(resolved).st_mode & 0o777
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "privacy_classification": "aggregate outbox health; no payloads, identifiers, paths, or error text",
         "integrity": integrity,
         "pending_records": int(pending),
+        "quarantined_records": int(quarantined),
+        "accepted_source_messages": int(accepted),
+        "delivered_records": int(counters.get("delivered_records", 0)),
+        "historical_accounting_complete": metadata.get("historical_accounting_complete") == "1",
         "records_with_attempts": int(attempted or 0),
         "max_attempts": int(max_attempts),
         "due_records": int(due or 0),
@@ -59,7 +80,11 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(f"Wrote aggregate outbox health for {result['pending_records']} pending records to {args.output}")
-    if args.require_healthy and (result["integrity"] != "ok" or not result["private_file_mode"]):
+    if args.require_healthy and (
+        result["integrity"] != "ok"
+        or not result["private_file_mode"]
+        or result["quarantined_records"] > 0
+    ):
         parser.exit(2, "Outbox health audit failed closed\n")
 
 

@@ -260,7 +260,11 @@ class KafkaVitalConsumer:
             if record_key != vital.patient_id:
                 raise ValidationError("kafka_key_patient_mismatch")
         except SchemaRegistryError as error:
-            if error.http_status_code != 404:
+            # Only Schema Registry's explicit "schema not found" response
+            # identifies poison wire data. Other HTTP 404 responses (for
+            # example, a missing subject or endpoint) are infrastructure or
+            # configuration failures and must leave the source uncommitted.
+            if error.http_status_code != 404 or error.error_code != 40403:
                 raise
             self._publish_dlq(raw or b"", source, error, source_timestamp_ms)
             self._commit(record)

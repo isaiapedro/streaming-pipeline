@@ -331,14 +331,23 @@ def build_manifest(
     latency_path = ROOT / "evidence" / "live_latency.json"
     traceability_path = ROOT / "evidence" / "traceability_audit.json"
     outbox_health_path = ROOT / "evidence" / "outbox_health.json"
+    reconciliation_path = ROOT / "evidence" / "storage_reconciliation.json"
     traceability_status = "unexecuted"
     if traceability_path.exists():
         try:
             traceability_status = json.loads(traceability_path.read_text()).get("status", "invalid")
         except (OSError, json.JSONDecodeError):
             traceability_status = "invalid"
+    reconciliation_status = "unexecuted"
+    if reconciliation_path.exists():
+        try:
+            reconciliation_status = json.loads(
+                reconciliation_path.read_text()
+            ).get("status", "invalid")
+        except (OSError, json.JSONDecodeError):
+            reconciliation_status = "invalid"
     return {
-        "manifest_version": 4,
+        "manifest_version": 5,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
         "code": {
@@ -431,6 +440,14 @@ def build_manifest(
                 "artifact": "evidence/outbox_health.json" if outbox_health_path.exists() else None,
                 "privacy": "aggregate SQLite health only",
             },
+            "storage_reconciliation": {
+                "status": reconciliation_status,
+                "artifact": (
+                    "evidence/storage_reconciliation.json"
+                    if reconciliation_path.exists() else None
+                ),
+                "privacy": "aggregate source/outbox/delivery/storage counts only",
+            },
         },
         "compliance_controls": {
             "runtime_log_redaction": {"status": "implemented_and_tested", "test": "brain/tests/test_compliance_tools.py"},
@@ -461,6 +478,7 @@ def build_manifest(
             "traceability_audit_export": "python3 scripts/audit_traceability.py --input-csv /approved/export.csv --output evidence/traceability_audit.json --require-complete",
             "traceability_audit_live": "python3 scripts/audit_traceability.py --live --range 1h --output evidence/traceability_audit.json --require-complete",
             "outbox_health": "python3 scripts/audit_outbox.py --database .runtime/influx_outbox.sqlite3 --output evidence/outbox_health.json --require-healthy",
+            "storage_reconciliation": "python3 scripts/reconcile_storage.py --database .runtime/influx_outbox.sqlite3 --stored-count COUNT --output evidence/storage_reconciliation.json --require-complete",
             "tests": "python3 -m pytest -q",
         },
     }

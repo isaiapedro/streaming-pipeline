@@ -1,6 +1,7 @@
 """Static, privacy-safe tests for infrastructure preflight inventory."""
 
 import json
+import subprocess
 
 import pytest
 
@@ -92,3 +93,31 @@ async def test_secure_verifier_uses_ephemeral_project_and_removes_container(monk
         "wrong_password_rejected": True,
         "untrusted_ca_rejected": True,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_phase", ["startup", "probe"])
+async def test_secure_verifier_removes_ephemeral_project_after_failure(
+    monkeypatch, failure_phase
+):
+    commands = []
+
+    def run(command, **_kwargs):
+        commands.append(command)
+        if failure_phase == "startup" and "up" in command:
+            raise subprocess.CalledProcessError(1, command)
+
+    async def connect(**_kwargs):
+        raise RuntimeError("forced secure-NATS probe failure")
+
+    monkeypatch.setattr(secure.subprocess, "run", run)
+    monkeypatch.setattr(secure, "_connect", connect)
+
+    with pytest.raises((RuntimeError, subprocess.CalledProcessError)):
+        await secure.verify()
+
+    compose_commands = [command for command in commands if command[:2] == ["docker", "compose"]]
+    assert compose_commands[-1][2:4] == compose_commands[0][2:4]
+    assert "down" in compose_commands[-1]
+    assert "--volumes" in compose_commands[-1]
+    assert "--remove-orphans" in compose_commands[-1]

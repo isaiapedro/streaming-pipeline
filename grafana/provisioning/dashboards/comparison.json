@@ -12,8 +12,8 @@
   "templating": {
     "list": [
       {
-        "name": "bucket", "label": "Bucket", "type": "constant", "query": "vitals",
-        "current": {"text": "vitals", "value": "vitals"}, "hide": 2
+        "name": "bucket", "label": "Bucket", "type": "constant", "query": "__INFLUX_BUCKET__",
+        "current": {"text": "__INFLUX_BUCKET__", "value": "__INFLUX_BUCKET__"}, "hide": 2
       },
       {
         "name": "patient", "label": "Synthetic patient", "type": "query", "includeAll": true,

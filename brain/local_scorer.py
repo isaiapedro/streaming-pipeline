@@ -20,8 +20,8 @@ from brain.validation import (
     DLQ_SUBJECT,
     ValidationError,
     dead_letter,
-    dead_letter_message_id,
     decode_and_validate,
+    nats_dead_letter_message_id,
 )
 from config.settings import PIPELINE_VERSION, nats_connection_options
 from config.thresholds import NEWS2_THRESHOLD_VERSION
@@ -74,7 +74,7 @@ async def _process(msg, profiles: dict[str, dict], states: dict[str, PatientEWSS
         await js.publish(
             DLQ_SUBJECT,
             dead_letter(msg.data, exc, msg.subject, pipeline_version=PIPELINE_VERSION),
-            headers={"Nats-Msg-Id": dead_letter_message_id(msg.data, msg.subject)},
+            headers={"Nats-Msg-Id": nats_dead_letter_message_id(msg)},
         )
         await msg.ack_sync()
         return

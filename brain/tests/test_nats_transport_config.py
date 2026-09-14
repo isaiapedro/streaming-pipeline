@@ -78,11 +78,13 @@ def test_dev_certificate_generator_refuses_silent_overwrite(tmp_path):
 
 def test_nats_consumer_contract_has_bounded_explicit_acknowledgements():
     config = BRAIN_CONSUMER.as_config()
+    assert config.deliver_policy.value == "all"
     assert config.ack_policy.value == "explicit"
     assert config.ack_wait == 30.0
     assert config.max_deliver == 3
     assert config.max_ack_pending == 500
     assert config.filter_subject == "vitals.>"
+    assert config.replay_policy.value == "instant"
 
 
 def test_nats_consumer_contract_rejects_server_configuration_drift():
@@ -90,28 +92,55 @@ def test_nats_consumer_contract_rejects_server_configuration_drift():
     drifted = {
         "durable_name": "BRAIN",
         "filter_subject": "vitals.>",
+        "deliver_policy": "new",
         "ack_policy": "explicit",
         "ack_wait": 60_000_000_000,
         "max_deliver": 5,
         "max_ack_pending": 1_000,
+        "replay_policy": "original",
     }
     with pytest.raises(RuntimeError, match="configuration drift") as error:
         contract.assert_matches(drifted)
     message = str(error.value)
     assert "ack_wait=60.0" in message
+    assert "deliver_policy='new'" in message
     assert "max_deliver=5" in message
     assert "max_ack_pending=1000" in message
+    assert "replay_policy='original'" in message
 
 
 def test_nats_consumer_contract_accepts_cli_nanosecond_duration():
     BRAIN_CONSUMER.assert_matches({
         "durable_name": "BRAIN",
         "filter_subject": "vitals.>",
+        "deliver_policy": "all",
         "ack_policy": "explicit",
         "ack_wait": 30_000_000_000,
         "max_deliver": 3,
         "max_ack_pending": 500,
+        "replay_policy": "instant",
     })
+
+
+@pytest.mark.parametrize(
+    ("field", "drifted_value"),
+    [("deliver_policy", "new"), ("replay_policy", "original")],
+)
+def test_nats_consumer_contract_rejects_delivery_semantic_drift(field, drifted_value):
+    actual = {
+        "durable_name": "BRAIN",
+        "filter_subject": "vitals.>",
+        "deliver_policy": "all",
+        "ack_policy": "explicit",
+        "ack_wait": 30_000_000_000,
+        "max_deliver": 3,
+        "max_ack_pending": 500,
+        "replay_policy": "instant",
+    }
+    actual[field] = drifted_value
+
+    with pytest.raises(RuntimeError, match=field):
+        BRAIN_CONSUMER.assert_matches(actual)
 
 
 def test_stream_setup_pins_acknowledgement_limits():
@@ -154,10 +183,12 @@ def test_consumer_config_checker_accepts_contract_and_rejects_drift():
         "config": {
             "durable_name": "BRAIN",
             "filter_subject": "vitals.>",
+            "deliver_policy": "all",
             "ack_policy": "explicit",
             "ack_wait": 30_000_000_000,
             "max_deliver": 3,
             "max_ack_pending": 500,
+            "replay_policy": "instant",
         }
     }
     command = [sys.executable, str(checker), "BRAIN"]

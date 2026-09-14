@@ -41,7 +41,7 @@ into a clinical or production claim.
 | --- | --- | --- |
 | Input integrity | Canonical Protobuf schema, structural validation, and source-subject identity checks | Synthetic inputs only |
 | Delivery integrity | Source ACK/offset commit occurs after the declared local handoff or confirmed DLQ publication | Does not prove remote Influx storage |
-| Local persistence | Atomic SQLite WAL outbox, full synchronization, capacity backpressure, integrity checks, retry across restart | Source-message idempotency across configuration changes remains unfinished |
+| Local persistence | Atomic SQLite WAL outbox, hashed source receipts, capacity backpressure, bounded retry, terminal quarantine, and accounting counters | Live crash/redelivery and final remote reconciliation remain unexecuted |
 | Transport isolation | Separate vital, DLQ, and alarm namespaces; bounded MQTT subscription; validation-only Kafka profile | Local single-node research infrastructure |
 | Security | Loopback ports, optional authenticated TLS NATS, disposable negative tests, ignored secrets/certificates, image digests | Not a production zero-trust or multi-node deployment |
 | Privacy | Synthetic-only contract, no Personal-domain inputs, aggregate-only evidence/audits, sanitized logs/errors | DLQ payloads can preserve rejected input and require controlled access/retention |
@@ -229,6 +229,8 @@ live traceability/reconciliation run is pending.
 - The patient and signal in the payload must match the NATS subject or mapped
   MQTT topic.
 - Invalid input cannot enter scoring or telemetry storage.
+- A descriptor-comparison test fails if the checked-in Python Protobuf artifact
+  drifts from the canonical `.proto` contract.
 - Kafka uses Schema Registry framing, fixed value subjects, runtime
   auto-registration disabled, and `BACKWARD_TRANSITIVE` compatibility checks.
 
@@ -244,10 +246,14 @@ live traceability/reconciliation run is pending.
 | Valid Kafka input | Completion of the supplied synchronous validation handler |
 | Invalid Kafka input | Confirmed structured Kafka DLQ delivery |
 
-Kafka auto commit and automatic offset storage are disabled. Registry outages
-that are potentially transient remain retryable and are not misclassified as
-poison input. MQTT source ACK is withheld when DLQ PUBACK fails. NATS source
-ACK is withheld when its DLQ or alarm publication fails.
+Kafka auto commit and automatic offset storage are disabled. Only Schema
+Registry error `40403` is treated as unknown-schema poison input; other 404s
+and potentially transient Registry outages remain retryable. MQTT source ACK
+is withheld when DLQ PUBACK fails, and its rejection envelope identifies the
+MQTT source topic. NATS source ACK is withheld when its DLQ or alarm
+publication fails. NATS rejection de-duplication binds the stable source stream
+sequence so one redelivery retains its identity while distinct identical
+publications remain distinct.
 
 An acknowledgement proves only the boundary in this table. In particular,
 outbox commit does not prove successful remote Influx storage, MQTT PUBACK does
@@ -262,24 +268,27 @@ records rather than storing application outcomes.
   the handoff and leaves the broker message unacknowledged, applying
   backpressure instead of dropping data.
 - Influx delivery happens asynchronously after the local durable handoff.
-- Failed writes remain in the outbox with attempt count, next-attempt time, and
-  bounded exponential delay across process restart.
+- Retriable writes remain in the outbox with attempt count, next-attempt time,
+  bounded exponential delay, and a maximum attempt count across restart.
 - Tentative scoring/batch state is rolled back when the durable handoff fails.
-- Exact derived records have stable content hashes, and Influx point identity
-  also uses stable tags and timestamp to suppress identical replay.
+- Hashed source receipts survive successful delivery and restart. NATS uses
+  stream sequence identity when available; MQTT uses validated topic plus
+  canonical wire payload identity.
+- Non-retriable 4xx and exhausted failures move to a private terminal
+  quarantine. Logs and audits expose only safe error codes and aggregate counts.
+- Transactional counters enable explicit source/outbox/delivery/Influx
+  reconciliation and reject legacy databases without complete accounting.
 
-Current idempotency does not yet derive from the original broker message. If a
-redelivery is evaluated under changed thresholds/configuration, it can create a
-different derived record. Stable source-message identity and crash tests across
-configuration changes remain open. Terminal failures also retry indefinitely
-because quarantine/advisory policy is not yet implemented.
+Live broker crash/redelivery evidence and final remote reconciliation remain
+open; the implementation and offline tests alone do not close those gates.
 
 ## 8. Stream and configuration governance
 
 - `VITALS` and `VITALS_DLQ` are file-backed with 24-hour maximum age.
 - `ALARMS` is file-backed with seven-day maximum age.
 - `BRAIN` and `LOCAL_SCORER` consumers use explicit ACK, 30-second `AckWait`,
-  three maximum deliveries, and 500 maximum pending acknowledgements.
+  delivery of all available messages, instant replay, three maximum deliveries,
+  and 500 maximum pending acknowledgements.
 - Provisioning reconciles mutable settings non-interactively, validates the
   full declared contract afterward, and propagates CLI/authentication errors.
 - Kafka provisioning verifies fixed topic names, partitions, replication, DLQ
@@ -304,8 +313,9 @@ The test strategy uses several layers:
 | Dashboard tests | Datasource identity, TLS verification, filters, A/B/C query semantics, paused alert default |
 | Optional live tests | NATS valid/DLQ/ALARMS, MQTT PUBACK/DLQ, Kafka schema/DLQ, secure TLS, parity |
 
-The latest recorded offline gate passed 211 tests with five optional live tests
-skipped. Those skips mean “not executed in this offline command,” not “passed.”
+The frozen post-attestation offline gate passed 226 tests; the current integrated
+development tree passes 238 tests. Both have five optional live tests skipped.
+Those skips mean “not executed in this offline command,” not “passed.”
 Separate live checks passed the NATS valid/DLQ/ALARMS paths, MQTT invalid-DLQ
 ordering, Kafka schema/DLQ paths, secure NATS positive/negative probes, and a
 parity run with 10 valid acceptances plus one intentional rejection on each
@@ -389,18 +399,17 @@ current evidence does not establish them.
 
 The following gaps are explicitly tracked rather than hidden:
 
-- source-message-derived outbox idempotency across configuration changes;
-- terminal-failure quarantine and operational advisories;
-- broker/input/outbox/Influx reconciliation;
-- benchmark interruption recovery and dependence-aware inference;
+- live source-message redelivery across crash and configuration changes;
+- execution of broker/input/outbox/Influx reconciliation on final telemetry;
+- dependence-aware inference and predeclared sensitivity analysis;
 - controlled restart, fault, replay, persistence, and memory tests;
 - successful-storage latency;
 - accepted T2–T4 scale evidence;
 - approved external-reference validation;
 - configured and tested retention/deletion policies;
 - owner-confirmed credential rotation;
-- governed Grafana bucket configuration, genuine onset-to-detection view, live
-  rendering, and approved notification receipt;
+- genuine onset-to-detection telemetry/view, live governed-bucket rendering,
+  and approved notification receipt;
 - final controlled reruns of any live gates affected by later implementation
   changes.
 

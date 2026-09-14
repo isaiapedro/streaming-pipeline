@@ -1,6 +1,7 @@
 import ast
 import json
 import logging
+import sqlite3
 import time
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from brain.influx_writer import InfluxWriter, VitalRecord, _safe_error_code
 from brain.main import _process as process_nats
 from scripts.audit_traceability import REQUIRED_TAGS, _csv_rows, audit_rows
 from scripts.audit_outbox import audit_outbox
+from scripts.reconcile_storage import reconcile_storage
 from schema import vitals_pb2
 
 ROOT = Path(__file__).parents[2]
@@ -101,6 +103,8 @@ async def test_outbox_health_is_read_only_aggregate_and_private(tmp_path):
     result = audit_outbox(path, now_ms=1_800_000_010_000)
     assert result["integrity"] == "ok"
     assert result["pending_records"] == 1
+    assert result["accepted_source_messages"] == 0
+    assert result["quarantined_records"] == 0
     assert result["private_file_mode"]
     encoded = json.dumps(result)
     assert "P-SECRET" not in encoded
@@ -127,6 +131,82 @@ async def test_outbox_open_scrubs_legacy_free_text_errors(tmp_path):
     restarted._open_outbox()
     assert restarted._db.execute("SELECT last_error FROM outbox").fetchone()[0] == "LegacyErrorRedacted"
     restarted._db.close()
+
+
+@pytest.mark.asyncio
+async def test_storage_reconciliation_accounts_for_delivery_without_identifiers(tmp_path):
+    class Api:
+        async def write(self, **_kwargs):
+            return None
+
+    class Client:
+        def write_api(self):
+            return Api()
+
+    path = tmp_path / "private" / "outbox.sqlite3"
+    writer = InfluxWriter(outbox_path=path)
+    writer._open_outbox()
+    writer._client = Client()
+    await writer.enqueue_many([VitalRecord(
+        patient_id="P-001", signal_type="heart_rate", condition="synthetic",
+        alarm_level="ok", value=80, timestamp_ms=1_800_000_000_000,
+        schema_version="1", pipeline_version="test", threshold_version="thresholds",
+    )], source_message_id="nats:VITALS:99")
+    await writer._flush(force=True)
+
+    result = reconcile_storage(path, stored_records=1)
+    assert result["status"] == "complete"
+    assert result["accepted_source_messages"] == 1
+    assert result["derived_records_enqueued"] == result["delivered_records"] == 1
+    serialized = json.dumps(result)
+    assert "P-001" not in serialized
+    assert "outbox.sqlite3" not in serialized
+    writer._db.close()
+    writer._db = None
+
+
+def test_storage_reconciliation_rejects_a_legacy_unaccounted_database(tmp_path):
+    path = tmp_path / "legacy.sqlite3"
+    database = sqlite3.connect(path)
+    database.execute(
+        """CREATE TABLE outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_key TEXT NOT NULL UNIQUE,
+            record_type TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            created_at_ms INTEGER NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            next_attempt_ms INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT
+        )"""
+    )
+    database.close()
+    writer = InfluxWriter(outbox_path=path)
+    writer._open_outbox()
+    writer._db.close()
+    writer._db = None
+
+    result = reconcile_storage(path, stored_records=0)
+    assert result["status"] == "incomplete"
+    assert not result["historical_accounting_complete"]
+
+
+def test_storage_reconciliation_reports_unmigrated_schema_without_crashing(tmp_path):
+    path = tmp_path / "unmigrated.sqlite3"
+    database = sqlite3.connect(path)
+    database.execute(
+        "CREATE TABLE outbox (id INTEGER PRIMARY KEY, created_at_ms INTEGER NOT NULL)"
+    )
+    database.close()
+
+    result = reconcile_storage(path, stored_records=0)
+
+    assert result["status"] == "incomplete"
+    assert not result["schema_compatible"]
+    assert result["accounting_started_at_ms"] is None
+    assert result["missing_tables"] == [
+        "outbox_counters", "outbox_meta", "outbox_quarantine", "source_receipts"
+    ]
 
 
 @pytest.mark.asyncio

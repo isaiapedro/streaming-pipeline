@@ -120,6 +120,7 @@ The runtime accepts these environment variables:
 | `INFLUX_URL`, `INFLUX_TOKEN`, `INFLUX_ORG`, `INFLUX_BUCKET` | Storage-backed Brain or latency run | InfluxDB connection and target |
 | `INFLUX_OUTBOX_PATH` | Optional storage override | SQLite outbox path; default `.runtime/influx_outbox.sqlite3`, resolved from the project root |
 | `INFLUX_OUTBOX_MAX_RECORDS` | Capacity policy | Maximum retained outbox records; capacity exhaustion applies broker backpressure |
+| `INFLUX_OUTBOX_MAX_ATTEMPTS` | Failure policy | Retry attempts before private terminal quarantine; default `10` |
 | `INFLUX_TIMEOUT_MS` | Influx delivery | Per-write timeout in milliseconds |
 | `INFLUX_RETRY_BASE_S`, `INFLUX_RETRY_MAX_S` | Influx delivery | Bounds exponential retry delays for retained failures |
 | `FLUSH_INTERVAL_S`, `FLUSH_BUFFER_SIZE` | Influx delivery | Delivery wake interval and maximum batch size |
@@ -354,12 +355,13 @@ Current NATS Brain behavior:
    outbox. Capacity or commit failure leaves the broker message unacknowledged
    and rolls back the tentative scoring state.
 4. The NATS message is synchronously acknowledged after that local commit.
-5. Influx delivery runs asynchronously. Failures remain in the outbox with
-   bounded exponential retry, including across process restarts.
+5. Influx delivery runs asynchronously. Retriable failures remain in the
+   outbox with bounded exponential retry across restart; non-retriable or
+   exhausted failures move to private terminal quarantine.
 
 Therefore an acknowledgement means “committed to the local durable outbox,”
-not “stored in remote InfluxDB.” Content-derived idempotency keys suppress
-duplicate outbox rows on redelivery. Never call this remote end-to-end
+not “stored in remote InfluxDB.” Hashed source receipts suppress duplicate
+derived batches on redelivery, including after configuration changes. Never call this remote end-to-end
 durability. Monitor `AckWait`, `MaxDeliver`, `MaxAckPending`, outbox pending
 count, retry attempts, last error, disk capacity, and maximum-delivery
 advisories; quarantine terminal failures under an approved retention policy.

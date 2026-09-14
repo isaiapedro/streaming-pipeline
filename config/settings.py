@@ -50,6 +50,7 @@ INFLUX_TIMEOUT_MS = int(os.getenv("INFLUX_TIMEOUT_MS", "10000"))
 _outbox_path = Path(os.getenv("INFLUX_OUTBOX_PATH", ".runtime/influx_outbox.sqlite3"))
 INFLUX_OUTBOX_PATH = _outbox_path if _outbox_path.is_absolute() else PROJECT_ROOT / _outbox_path
 INFLUX_OUTBOX_MAX_RECORDS = int(os.getenv("INFLUX_OUTBOX_MAX_RECORDS", "100000"))
+INFLUX_OUTBOX_MAX_ATTEMPTS = int(os.getenv("INFLUX_OUTBOX_MAX_ATTEMPTS", "10"))
 INFLUX_RETRY_BASE_S = float(os.getenv("INFLUX_RETRY_BASE_S", "1"))
 INFLUX_RETRY_MAX_S = float(os.getenv("INFLUX_RETRY_MAX_S", "60"))
 
@@ -59,6 +60,8 @@ FLUSH_BUFFER_SIZE = int(os.getenv("FLUSH_BUFFER_SIZE", "500"))
 
 if INFLUX_OUTBOX_MAX_RECORDS < 1:
     raise RuntimeError("INFLUX_OUTBOX_MAX_RECORDS must be at least 1")
+if INFLUX_OUTBOX_MAX_ATTEMPTS < 1:
+    raise RuntimeError("INFLUX_OUTBOX_MAX_ATTEMPTS must be at least 1")
 if INFLUX_TIMEOUT_MS < 1:
     raise RuntimeError("INFLUX_TIMEOUT_MS must be at least 1")
 if FLUSH_INTERVAL_S <= 0 or FLUSH_BUFFER_SIZE < 1:

@@ -261,8 +261,10 @@ SIGNAL_THRESHOLDS = {
 2. `evaluator.py` compares value against thresholds → returns `alarm_level` string
 3. All derived records are atomically committed to the local SQLite WAL outbox
 4. The broker message is acknowledged after that durable local commit
-5. Retryable batches are delivered to InfluxDB Cloud asynchronously; failures
-   remain in the outbox across restart
+5. Retryable batches are delivered to InfluxDB Cloud asynchronously; exhausted
+   or non-retriable failures move to private terminal quarantine
+6. Hashed source receipts suppress redelivery even after threshold changes;
+   aggregate counters support explicit Influx reconciliation
 
 ### Grafana alerting
 

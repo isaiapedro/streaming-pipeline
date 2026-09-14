@@ -17,6 +17,7 @@ from brain.local_scorer import make_alarm_event
 from brain.main import _process as process_nats
 from brain.mqtt_consumer import _process as process_mqtt
 from brain.validation import decode_and_validate
+from scripts.render_grafana_assets import render_assets
 from config.thresholds import (
     NEWS2_THRESHOLD_VERSION,
     get_threshold_snapshot,
@@ -119,6 +120,80 @@ async def test_outbox_is_idempotent_and_capacity_failure_is_atomic(tmp_path):
     with pytest.raises(OutboxFullError, match="message remains unacked"):
         await writer.enqueue_many([record, _vital_record(record.timestamp_ms + 1)])
     assert writer.pending_count == 1
+    writer._db.close()
+    writer._db = None
+
+
+@pytest.mark.asyncio
+async def test_source_receipt_suppresses_redelivery_after_restart_and_config_change(tmp_path):
+    path = tmp_path / "outbox.sqlite3"
+    first = InfluxWriter(outbox_path=path)
+    first._open_outbox()
+    original = _vital_record()
+    assert await first.enqueue_many([original], source_message_id="nats:VITALS:41")
+    first._db.close()
+    first._db = None
+
+    restarted = InfluxWriter(outbox_path=path)
+    restarted._open_outbox()
+    changed = _vital_record()
+    changed.threshold_version = "sha256:new-thresholds"
+    changed.alarm_level = "warning"
+    assert not await restarted.enqueue_many([changed], source_message_id="nats:VITALS:41")
+    assert restarted.pending_count == 1
+    payload = restarted._db.execute("SELECT payload FROM outbox").fetchone()[0]
+    assert json.loads(payload)["threshold_version"] == "sha256:thresholds"
+    restarted._db.close()
+    restarted._db = None
+
+
+@pytest.mark.asyncio
+async def test_source_receipt_survives_successful_delivery(tmp_path):
+    writer = InfluxWriter(outbox_path=tmp_path / "outbox.sqlite3")
+    writer._open_outbox()
+    writer._client = _InfluxClient()
+    assert await writer.enqueue_many([_vital_record()], source_message_id="mqtt:payload:stable")
+    await writer._flush(force=True)
+    assert writer.pending_count == 0
+    assert not await writer.enqueue_many(
+        [_vital_record()], source_message_id="mqtt:payload:stable"
+    )
+    assert len(writer._client.api.calls) == 1
+    writer._db.close()
+    writer._db = None
+
+
+@pytest.mark.asyncio
+async def test_non_retryable_failure_moves_payload_to_private_quarantine(tmp_path, caplog):
+    class BadRequest(RuntimeError):
+        status = 400
+
+    writer = InfluxWriter(outbox_path=tmp_path / "outbox.sqlite3", max_attempts=10)
+    writer._open_outbox()
+    writer._client = _InfluxClient(BadRequest("sensitive remote response"))
+    await writer.enqueue_many([_vital_record()], source_message_id="nats:VITALS:42")
+    await writer._flush(force=True)
+    assert writer.pending_count == 0
+    row = writer._db.execute(
+        "SELECT attempts, error_code FROM outbox_quarantine"
+    ).fetchone()
+    assert row == (1, "BadRequest:status=400")
+    assert "sensitive remote response" not in caplog.text
+    writer._db.close()
+    writer._db = None
+
+
+@pytest.mark.asyncio
+async def test_retryable_failure_is_quarantined_at_maximum_attempts(tmp_path):
+    writer = InfluxWriter(outbox_path=tmp_path / "outbox.sqlite3", max_attempts=2)
+    writer._open_outbox()
+    writer._client = _InfluxClient(RuntimeError("offline"))
+    await writer.enqueue_many([_vital_record()], source_message_id="nats:VITALS:43")
+    await writer._flush(force=True)
+    assert writer.pending_count == 1
+    await writer._flush(force=True)
+    assert writer.pending_count == 0
+    assert writer._db.execute("SELECT COUNT(*) FROM outbox_quarantine").fetchone()[0] == 1
     writer._db.close()
     writer._db = None
 
@@ -297,6 +372,8 @@ def test_grafana_assets_have_filters_versions_and_safe_alert(tmp_path):
     assert {item["name"] for item in dashboard["templating"]["list"]} >= {
         "patient", "scenario", "approach"
     }
+    bucket = next(item for item in dashboard["templating"]["list"] if item["name"] == "bucket")
+    assert bucket["query"] == "__INFLUX_BUCKET__"
     titles = {panel["title"] for panel in dashboard["panels"]}
     assert {
         "NEWS2 score — Approaches B/C only",
@@ -322,8 +399,29 @@ def test_grafana_assets_have_filters_versions_and_safe_alert(tmp_path):
     assert "INFLUX_TOKEN" not in rules
     assert "data_class: synthetic" in rules
     assert 'r.scenario_id != "none"' in rules
+    assert 'from(bucket: "__INFLUX_BUCKET__")' in rules
     datasource = (root / "grafana/provisioning/datasources/influxdb.yml").read_text()
     assert "uid: influxdb-cloud" in datasource
     assert "${INFLUX_URL}" in datasource and "${INFLUX_TOKEN}" in datasource
     assert "tlsSkipVerify: false" in datasource
     assert "http://" not in datasource and "https://" not in datasource
+
+    rendered_dir = tmp_path / "grafana"
+    render_assets("approved-bucket_1", rendered_dir)
+    rendered_dashboard = json.loads(
+        (rendered_dir / "dashboards/comparison.json").read_text()
+    )
+    rendered_bucket = next(
+        item for item in rendered_dashboard["templating"]["list"] if item["name"] == "bucket"
+    )
+    assert rendered_bucket["query"] == "approved-bucket_1"
+    rendered_rules = (rendered_dir / "alerting/rules.yml").read_text()
+    assert 'from(bucket: "approved-bucket_1")' in rendered_rules
+    assert "__INFLUX_BUCKET__" not in rendered_rules
+    assert (rendered_dir / "dashboards/dashboard.yml").is_file()
+    assert (rendered_dir / "datasources/influxdb.yml").is_file()
+
+
+def test_grafana_renderer_rejects_unsafe_bucket(tmp_path):
+    with pytest.raises(ValueError, match="INFLUX_BUCKET"):
+        render_assets('bad\"bucket', tmp_path)

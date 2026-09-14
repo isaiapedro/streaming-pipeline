@@ -27,15 +27,20 @@ coordinator-owned schema revision is approved.
 
 Each accepted broker message produces its complete set of telemetry records in
 one SQLite WAL transaction. NATS and MQTT acknowledge that input only after the
-transaction commits. A capacity or local persistence failure leaves the input
-unacknowledged and restores tentative scoring/batch state so broker redelivery
-can retry it. Stable content-derived keys make this redelivery idempotent at
-the outbox boundary.
+transaction commits. The transaction includes a hashed source receipt: NATS
+prefers the stream sequence and MQTT uses validated topic plus canonical wire
+payload identity. The receipt survives delivery and restart, so replay after a
+threshold change cannot create a second derived batch. A capacity or local
+persistence failure leaves the input unacknowledged and restores tentative
+scoring/batch state; duplicate receipt handling also restores tentative state
+before acknowledgement.
 
 InfluxDB delivery occurs after acknowledgement. A delivery failure increments
 retry metadata and retains the records for bounded exponential retry across
-restart; it does not discard the batch. Consequently, acknowledgement proves a
-local durable handoff, not successful remote storage. An end-to-end storage
+restart. Non-retriable 4xx failures and exhausted retries move to a private
+terminal quarantine; a privacy-safe error code and aggregate count form the
+operational advisory. Consequently, acknowledgement proves a local durable
+handoff, not successful remote storage. An end-to-end storage
 claim requires separate publish-to-successful-write evidence and reconciliation
 between broker input, outbox state, and InfluxDB output.
 
@@ -43,6 +48,8 @@ The default outbox lives at `.runtime/influx_outbox.sqlite3`, outside version
 control. Its parent and database use private permissions. Operators must
 monitor pending rows, retry attempts, last error, database integrity, and disk
 capacity; reaching the configured maximum deliberately applies backpressure.
+`INFLUX_OUTBOX_MAX_ATTEMPTS` defaults to 10. Receipt and quarantine retention
+remain owner-controlled under D6.
 
 ## Privacy and logging
 
@@ -105,6 +112,20 @@ python3 scripts/audit_outbox.py --database .runtime/influx_outbox.sqlite3 \
 
 Neither command establishes successful storage unless it is executed against
 the final clean-run artifacts and reconciled to accepted broker inputs.
+
+After counting one Influx field per logical record (`patient_vitals/value` and
+`alarms/news2_score`), produce the aggregate reconciliation with:
+
+```bash
+python3 scripts/reconcile_storage.py --database .runtime/influx_outbox.sqlite3 \
+  --stored-count COUNT --output evidence/storage_reconciliation.json \
+  --require-complete
+```
+
+The reconciler is read-only and fail-closed. A legacy or unmigrated outbox is
+reported as `incomplete` with aggregate missing-schema metadata instead of
+raising an opaque SQLite/metadata error. Schema migration cannot retroactively
+establish historical accounting completeness.
 
 ## Credential status
 

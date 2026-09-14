@@ -14,7 +14,12 @@ from confluent_kafka.admin import AdminClient
 
 from kafka_path.provision import provision
 from kafka_path.settings import KafkaSettings
-from kafka_path.transport import KafkaCodec, KafkaVitalConsumer, KafkaVitalProducer
+from kafka_path.transport import (
+    KafkaCodec,
+    KafkaPollResult,
+    KafkaVitalConsumer,
+    KafkaVitalProducer,
+)
 from schema import vitals_pb2
 
 
@@ -33,10 +38,15 @@ def _skip_or_fail(message: str) -> None:
     pytest.skip(message)
 
 
-def _poll_until(consumer: KafkaVitalConsumer, handler, expected: bool, timeout: float = 10.0):
+def _poll_until(
+    consumer: KafkaVitalConsumer,
+    handler,
+    expected: KafkaPollResult,
+    timeout: float = 10.0,
+):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        result = consumer.poll_once(handler, timeout=0.5)
+        result = consumer.poll_result(handler, timeout=0.5)
         if result is expected:
             return
     pytest.fail("Timed out waiting for the expected Kafka record")
@@ -81,7 +91,7 @@ def test_kafka_schema_round_trip_and_dlq_ordering():
     handled = []
     try:
         producer.publish(valid)
-        _poll_until(consumer, handled.append, True)
+        _poll_until(consumer, handled.append, KafkaPollResult.ACCEPTED)
         assert handled[-1].scenario_id == f"kafka-{suffix}"
 
         raw_producer = Producer(settings.producer_config())
@@ -96,9 +106,9 @@ def test_kafka_schema_round_trip_and_dlq_ordering():
         raw_producer.produce(settings.vitals_topic, key=b"P-001", value=malformed_wire)
         raw_producer.produce(settings.vitals_topic, key=b"P-001", value=unknown_schema_wire)
         assert raw_producer.flush(10) == 0
-        _poll_until(consumer, handled.append, False)
-        _poll_until(consumer, handled.append, False)
-        _poll_until(consumer, handled.append, False)
+        _poll_until(consumer, handled.append, KafkaPollResult.REJECTED)
+        _poll_until(consumer, handled.append, KafkaPollResult.REJECTED)
+        _poll_until(consumer, handled.append, KafkaPollResult.REJECTED)
     finally:
         consumer.close()
 

@@ -146,7 +146,35 @@ def dead_letter(
     return envelope.SerializeToString()
 
 
-def dead_letter_message_id(raw: bytes, source_subject: str) -> str:
-    """Return a stable JetStream de-duplication ID for one rejected input."""
-    digest = sha256(source_subject.encode() + b"\0" + raw).hexdigest()
+def dead_letter_message_id(
+    raw: bytes,
+    source_subject: str,
+    *,
+    source_message_id: str | int | None = None,
+) -> str:
+    """Return a stable de-duplication ID for one rejected source message.
+
+    A broker identity keeps redelivery of the same message idempotent without
+    collapsing two distinct publications that happen to have identical bytes.
+    Callers without a broker identity retain the content-derived fallback.
+    """
+
+    material = source_subject.encode() + b"\0"
+    if source_message_id is not None:
+        material += str(source_message_id).encode() + b"\0"
+    digest = sha256(material + raw).hexdigest()
     return f"dlq:{digest}"
+
+
+def nats_dead_letter_message_id(msg) -> str:
+    """Bind a rejection ID to JetStream's stable source stream sequence."""
+
+    try:
+        source_sequence = msg.metadata.sequence.stream
+    except (AttributeError, TypeError, ValueError):
+        source_sequence = None
+    return dead_letter_message_id(
+        msg.data,
+        msg.subject,
+        source_message_id=source_sequence,
+    )

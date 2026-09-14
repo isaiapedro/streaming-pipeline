@@ -6,6 +6,7 @@ from brain.validation import (
     ValidationError,
     dead_letter,
     dead_letter_message_id,
+    nats_dead_letter_message_id,
     decode_and_validate,
 )
 from schema import vitals_pb2
@@ -84,3 +85,33 @@ def test_dead_letter_message_id_is_stable_and_input_specific():
     assert first == dead_letter_message_id(b"bad", "vitals.P-001.spo2")
     assert first != dead_letter_message_id(b"worse", "vitals.P-001.spo2")
     assert first != dead_letter_message_id(b"bad", "vitals.P-002.spo2")
+
+
+def test_dead_letter_message_id_distinguishes_distinct_broker_messages():
+    first = dead_letter_message_id(
+        b"bad", "vitals.P-001.spo2", source_message_id=41
+    )
+    assert first == dead_letter_message_id(
+        b"bad", "vitals.P-001.spo2", source_message_id=41
+    )
+    assert first != dead_letter_message_id(
+        b"bad", "vitals.P-001.spo2", source_message_id=42
+    )
+
+
+def test_nats_dead_letter_id_uses_stable_stream_sequence():
+    class Sequence:
+        stream = 17
+
+    class Metadata:
+        sequence = Sequence()
+
+    class Message:
+        subject = "vitals.P-001.spo2"
+        data = b"bad"
+        metadata = Metadata()
+
+    first = nats_dead_letter_message_id(Message())
+    assert first == nats_dead_letter_message_id(Message())
+    Message.metadata.sequence.stream = 18
+    assert first != nats_dead_letter_message_id(Message())

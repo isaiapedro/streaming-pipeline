@@ -8,6 +8,8 @@ can compare them side by side.
 
 import asyncio
 import copy
+import hashlib
+import inspect
 import json
 import logging
 import signal
@@ -28,8 +30,8 @@ from brain.validation import (
     DLQ_SUBJECT,
     ValidationError,
     dead_letter,
-    dead_letter_message_id,
     decode_and_validate,
+    nats_dead_letter_message_id,
 )
 from config.settings import PIPELINE_VERSION
 from config.thresholds import NEWS2_THRESHOLD_VERSION, get_threshold_snapshot
@@ -43,6 +45,21 @@ log = logging.getLogger(__name__)
 PROFILES_DIR = Path(__file__).parent.parent / "data" / "profiles"
 _PULL_BATCH   = 50
 _PULL_TIMEOUT = 1.0   # seconds
+
+
+def _nats_source_message_id(msg) -> str:
+    """Return a stable, privacy-safe identity for broker redelivery deduplication."""
+    try:
+        metadata = msg.metadata
+        stream = metadata.stream
+        sequence = metadata.sequence.stream
+        if stream and sequence:
+            digest = hashlib.sha256(msg.subject.encode() + b"\0" + msg.data).hexdigest()
+            return f"nats:{stream}:{sequence}:{digest}"
+    except (AttributeError, RuntimeError):
+        pass
+    digest = hashlib.sha256(msg.subject.encode() + b"\0" + msg.data).hexdigest()
+    return f"nats:payload:{digest}"
 
 
 def _load_profiles() -> dict[str, dict]:
@@ -73,7 +90,7 @@ async def _process(
         await js.publish(
             DLQ_SUBJECT,
             dead_letter(msg.data, exc, msg.subject, pipeline_version=PIPELINE_VERSION),
-            headers={"Nats-Msg-Id": dead_letter_message_id(msg.data, msg.subject)},
+            headers={"Nats-Msg-Id": nats_dead_letter_message_id(msg)},
         )
         await msg.ack_sync()
         return
@@ -148,7 +165,9 @@ async def _process(
     # fails (including outbox capacity), JetStream receives no acknowledgement
     # and redelivers. Influx delivery may complete asynchronously afterward.
     try:
-        await _durable_handoff(writer, records)
+        accepted = await _durable_handoff(
+            writer, records, source_message_id=_nats_source_message_id(msg)
+        )
     except Exception:
         # Scoring state and the batch cadence are not authoritative until the
         # derived records commit. Restore them so a JetStream redelivery is
@@ -162,18 +181,36 @@ async def _process(
         else:
             batch_scheduler._last_tick[patient_id] = previous_tick
         raise
+    if not accepted:
+        if previous_state is None:
+            ews_states.pop(patient_id, None)
+        else:
+            ews_states[patient_id] = previous_state
+        if previous_tick is None:
+            batch_scheduler._last_tick.pop(patient_id, None)
+        else:
+            batch_scheduler._last_tick[patient_id] = previous_tick
     await msg.ack_sync()
 
 
-async def _durable_handoff(writer: InfluxWriter, records: list[VitalRecord | AlarmRecord]) -> None:
+async def _durable_handoff(
+    writer: InfluxWriter,
+    records: list[VitalRecord | AlarmRecord],
+    *,
+    source_message_id: str | None = None,
+) -> bool:
     """Persist a message's complete derived record set as one transaction."""
     enqueue_many = getattr(writer, "enqueue_many", None)
     if enqueue_many is not None:
-        await enqueue_many(records)
-        return
+        if "source_message_id" in inspect.signature(enqueue_many).parameters:
+            result = await enqueue_many(records, source_message_id=source_message_id)
+        else:
+            result = await enqueue_many(records)
+        return result is not False
     # Compatibility for deliberately minimal test writers.
     for record in records:
         await writer.enqueue(record)
+    return True
 
 
 async def main() -> None:

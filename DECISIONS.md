@@ -25,8 +25,9 @@ is implemented because they are required to reproduce and verify the claims.
 For the NATS and MQTT runtime paths, the acknowledgement boundary is the
 atomic commit of every derived telemetry record to the private SQLite WAL
 outbox. Remote InfluxDB delivery is asynchronous. Failed deliveries remain
-retryable across restart, content-derived keys make redelivery idempotent, and
-outbox capacity failure applies broker backpressure. This supports a local
+retryable across restart, hashed source receipts make redelivery independent
+of derived configuration, and outbox capacity failure applies broker
+backpressure. Terminal failures move to private quarantine. This supports a local
 durability claim only; successful remote storage requires separate measurement
 and reconciliation evidence.
 
@@ -83,6 +84,18 @@ input namespace.
 Kafka Schema Registry compatibility enforcement is isolated from the NATS
 prototype and governed by the Milestone 4 decision below.
 
+## 2026-09-13 — Rejected NATS identity follows the source stream sequence
+
+JetStream de-duplication for a rejected NATS input is bound to the stable
+source-stream sequence, subject, and payload. Redelivery of the same source
+message therefore retains one rejection identity, while two distinct source
+publications with identical bytes remain distinct. When a broker source
+identity is unavailable, non-NATS callers retain the content-derived fallback.
+
+This identity controls DLQ publication de-duplication only. It does not imply
+exactly-once processing, durable MQTT rejection storage, or end-to-end
+idempotency across the telemetry pipeline.
+
 ## 2026-09-13 — Kafka is an isolated validation-only comparison, not the MVP transport
 
 Milestone 4 implements a local, opt-in Kafka and Confluent Schema Registry path
@@ -131,6 +144,27 @@ delivery or restart-continuity claim is made.
 
 ## Resolved release decisions
 
+### 2026-09-13 — Runtime deduplication and terminal delivery are explicit states
+
+Accepted NATS messages use stream sequence identity when available; MQTT uses
+the validated topic plus canonical wire payload identity. Only a SHA-256 digest
+is retained in `source_receipts`. The receipt is committed atomically with all
+derived records and remains after delivery, making redelivery independent of
+later threshold/configuration changes. MQTT byte-identical publications are
+therefore the same logical source event under this prototype contract.
+
+Influx HTTP 408, 409, 425, 429, and 5xx responses are retriable. Other 4xx
+responses are terminal; failures without a status remain retriable. Retriable
+records move to terminal quarantine after `INFLUX_OUTBOX_MAX_ATTEMPTS` (default
+10). Quarantine preserves the synthetic payload for controlled diagnosis in
+the private SQLite file, while logs and auditors expose only safe codes and
+aggregate counts. D6 still governs receipt/quarantine retention and deletion.
+
+The cumulative SQLite counters and source receipts are the local accounting
+authority. An Influx completeness claim additionally requires a matching
+logical-record query and a `complete` reconciliation result; an ambiguous
+remote success surfaces as a mismatch rather than being hidden.
+
 ### 2026-09-13 — Offline evidence uses a two-commit attestation
 
 The measured implementation is frozen before evidence generation. A reviewed
@@ -162,22 +196,38 @@ claims.
 | D10 | Author and methodology reviewer | Predeclare sensitivity ranges for clear hold, thresholds, cadence, freshness, profiles, drift, noise, and SpO2 scale | Robustness claims |
 | D11 | Safety and architecture owner | Keep cloud-to-local suppression out of scope or authorize a separate safety design | Any suppression implementation or claim |
 | D12 | Author and supervisor | Approve the evidence level and limitation wording for each headline result | Dissertation submission or public release |
+| D13 | MQTT service owner | Select the stable Brain client identity, singleton/multi-instance session ownership, and bounded in-memory queue capacity | MQTT crash/restart redelivery implementation and evidence |
+
+### 2026-09-13 — Benchmark recovery uses one durable per-cell journal
+
+The benchmark appends one privacy-safe journal record after every completed or
+failed seed cell, flushes it, and calls `fsync` before starting the next cell.
+Each record binds the complete protocol fingerprint, attempt number, safe
+failure class, provenance, and three A/B/C result rows. `--resume` is allowed
+only when the current invocation matches that fingerprint. It discards only a
+torn final append, preserves complete failures, skips completed cells, retries
+failed cells, and atomically rebuilds the public CSV and run log. The previous
+published outputs remain untouched until every cell completes.
+
+This supports recovery of the evidence-generation process. It does not imply
+broker, storage, operating-system, or hardware fault tolerance.
 
 ## Open implementation gaps
 
-- Benchmark provenance is not yet append-and-flush crash safe and lacks an
-  interrupted-run recovery protocol.
+- The MQTT Brain consumer still uses a generated client identity, a clean
+  broker session, and an unbounded application queue. Stable restart redelivery
+  requires a governed client identity, persistent session, bounded queue, and
+  a live crash-before-ACK test.
 - The analysis does not yet implement the frozen ADEMP/STRESS protocol,
   crossed-seed dependence-aware paired inference, Monte Carlo error reporting,
   non-detection sensitivity treatment, or predeclared sensitivity analysis.
-- Outbox identity is derived from exact output content rather than stable
-  source-message identity across configuration changes.
-- Influx retry lacks a governed maximum-attempt classification, terminal
-  quarantine, and privacy-safe operational advisory.
-- No single reconciliation artifact joins accepted broker inputs, outbox
-  pending/delivered state, successful writes, and stored Influx points.
-- Grafana still requires governed bucket parameterization and a genuine
-  onset-to-detection source/view.
+- Live broker evidence has not yet shown source-receipt de-duplication across a
+  crash-before-ACK and threshold/configuration change for both NATS and MQTT.
+- The reconciliation tool exists, but no final outbox-lifetime result has yet
+  been joined to the matching Influx logical-record count.
+- Grafana bucket parameterization is implemented; a genuine live
+  onset-to-detection view still lacks stable run, absolute-onset, and newly
+  opened episode telemetry.
 
 ## Open execution and evidence gaps
 

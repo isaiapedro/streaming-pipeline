@@ -28,17 +28,31 @@ row-level external reference data are prohibited from repository artifacts.
 - The bounded offline evidence bundle has a clean, portable final attestation.
   This closes the offline package gate only; the operational, external-data,
   scale, storage, retention, and notification gates below remain open.
-- Release is still blocked by Agent 2, Agent 3, and coordinator gates below.
+- The bounded offline package is released. Broader operational and public-claim
+  expansion remains governed by the Agent 1–3 and coordinator gates below.
 
 ## Parallel worker queues
 
 ### Agent 1 — Transport and schema
 
-No implementation tasks remain in this queue. The clean-commit rerun and
-cross-lane release checks are coordinator-owned because they depend on all
-workers finishing. Future production TLS, multi-broker Kafka durability,
-hosted Kafka, durable MQTT DLQ archival, and a notification consumer are
-explicitly out of current scope, not unfinished Agent 1 work.
+The core transport/schema paths and their offline regression gates are
+implemented. Remaining work:
+
+1. After owner decision D13, give the MQTT Brain consumer a governed stable
+   client identity, persistent broker session, and bounded application queue.
+   Add a live crash-before-source-ACK test that proves QoS 1 redelivery after
+   process restart without claiming durable DLQ archival.
+2. Execute the owner-approved restart, replay, maximum-delivery, persistence,
+   and DLQ de-duplication fault matrix. Keep each unavailable case explicitly
+   `unexecuted`; this is execution evidence, not permission to broaden the
+   transport design.
+
+The schema descriptor drift gate, source-sequence-aware NATS DLQ identity,
+complete NATS consumer delivery/replay drift enforcement, MQTT DLQ provenance,
+Kafka idle/poison distinction, delivery failure gates, and provisioning
+regressions are complete. Future production TLS, multi-broker Kafka
+durability, hosted Kafka, durable MQTT DLQ archival, and a notification
+consumer remain explicitly out of scope.
 
 ### Agent 2 — Experimental evidence
 
@@ -46,49 +60,56 @@ Work only in benchmark, aggregation, distribution, scale/latency, and
 `evidence/` paths unless a shared semantic change is coordinated.
 
 The manifest inventory, two-commit attestation model, exact pinned environment,
-and clean full-matrix regeneration gates are implemented. Remaining work:
+clean full-matrix regeneration, and crash-recoverable per-cell provenance
+journal are complete. The bounded offline package does not need another clean
+rerun. Remaining work and claim extensions are:
 
-1. Add publish-to-successful-storage latency evidence or explicitly retain it
+1. Implement only the owner-approved dependence-aware paired estimands, Monte
+   Carlo error, non-detection treatment, and sensitivity analysis. The current
+   final descriptive benchmark remains valid within its stated scope.
+2. Add publish-to-successful-storage latency evidence or explicitly retain it
    as `unexecuted`; do not infer it from local outbox acknowledgement.
-2. Extend protocol evidence beyond current throughput/latency coverage to the
+3. Extend protocol evidence beyond current throughput/latency coverage to the
    declared restart and recovery dimensions, with isolated broker control.
-3. Execute scale tiers T2–T4 or mark each tier `unexecuted`; do not generalize
-   T1 transport evidence into a 500-patient scoring/storage claim.
-4. Run distribution validation only against an approved external source and
+4. Execute scale tiers T2–T4 or retain each tier as `unexecuted`; do not
+   generalize T1 transport evidence into a 500-patient scoring/storage claim.
+5. Run distribution validation only against an approved external source and
    retain non-sensitive source ID, license/DUA status, transformation version,
    direction `KL(P_synthetic || P_reference)`, and hashes—never source rows.
-5. Produce the Agent 2/M5 acceptance report with exact commands, results,
-    skipped gates, commit identity, limitations, and evidence-level ceiling.
+6. Produce the Agent 2/M5 acceptance report with exact commands, results,
+   skipped gates, commit identity, limitations, and evidence-level ceiling.
 
 ### Agent 3 — Telemetry, recovery, and visualization
 
 Work only in runtime persistence, telemetry, Grafana, alerting, and associated
 tests unless a shared semantic change is coordinated.
 
-1. Replace exact-derived-record hashes with stable source-message identity
-   propagated from NATS/MQTT. Test redelivery and process crash across threshold
-   or configuration changes; writer restart for identical records already has
-   offline coverage.
-2. Define maximum-attempt/failure classification and implement privacy-safe
-   terminal quarantine plus an advisory/operational signal and tests. The
-   aggregate read-only outbox-health tool is already complete.
-3. Produce one reconciliation result joining accepted broker input counts,
-   outbox pending/delivered state, and stored Influx counts; execute it against
-   final telemetry before making any remote-storage completeness claim.
-4. Obtain owner approval for Influx, broker, DLQ, alarm, and log retention;
+Stable hashed source receipts for NATS and MQTT, duplicate-state rollback,
+maximum-attempt and HTTP failure classification, private terminal quarantine,
+aggregate advisories/counters, reconciliation tooling, governed Grafana bucket
+rendering, and their offline tests are complete. Remaining work:
+
+1. Execute the approved live crash-before-ACK/redelivery matrix across a
+   threshold change for both NATS and MQTT, then retain sanitized results. The
+   offline writer-restart test is complete; it is not live broker evidence.
+2. Execute `scripts/reconcile_storage.py` against the final outbox lifetime and
+   matching Influx logical-record count. Do not make a remote-storage
+   completeness claim from the tool's existence or an incomplete result.
+3. Obtain owner approval for Influx, broker, DLQ, alarm, log, source-receipt,
+   and quarantine retention;
    configure and test only the approved policies and deletion controls.
-5. Record owner confirmation that the historically exposed Influx token was
+4. Record owner confirmation that the historically exposed Influx token was
    rotated; never record either credential value.
-6. Add a genuine Grafana onset-to-detection view based on an explicit onset
-   source or annotation. The existing static evidence timeline does not satisfy
-   this live-dashboard gate.
-7. Replace the hardcoded `vitals` bucket in dashboard and alert queries with
-   governed configuration, strengthen tests for both, and run live
-   datasource/query/render validation against final telemetry.
-8. Exercise the paused synthetic alert end to end only after an approved
+5. Coordinate a runtime schema/telemetry decision that supplies stable
+   experiment-run identity, absolute onset, and newly opened alarm-episode
+   identity; then add a genuine Grafana onset-to-detection view. The existing
+   static timeline and alarm-observation view do not satisfy this gate.
+6. Run live datasource/query/render validation against final telemetry using
+   the rendered governed bucket assets.
+7. Exercise the paused synthetic alert end to end only after an approved
    destination is configured; retain sanitized evidence and document that the
    local `ALARMS` stream alone is not external notification delivery.
-9. After live gates, update only the maintained authorities and evidence
+8. After live gates, update only the maintained authorities and evidence
    artifacts with actual outcomes; the repository has intentionally
    consolidated and removed milestone reports.
 

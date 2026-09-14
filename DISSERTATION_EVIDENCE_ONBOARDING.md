@@ -358,6 +358,15 @@ Audit local durable handoff:
 Both outputs are aggregate and privacy-safe. Neither establishes remote
 storage completeness without reconciliation.
 
+Count one field per logical stored record and reconcile from the accounting
+epoch recorded in the outbox database:
+
+```bash
+.venv/bin/python scripts/reconcile_storage.py \
+  --database .runtime/influx_outbox.sqlite3 --stored-count COUNT \
+  --output evidence/storage_reconciliation.json --require-complete
+```
+
 ## Grafana visualizations
 
 Offline validation:
@@ -366,14 +375,15 @@ Offline validation:
 .venv/bin/python -m json.tool \
   grafana/provisioning/dashboards/comparison.json >/dev/null
 .venv/bin/python -m pytest -q brain/tests/test_telemetry.py
+.venv/bin/python scripts/render_grafana_assets.py --bucket "$INFLUX_BUCKET"
 ```
 
 NEWS2 panels contain B/C only. A/B/C alarm views union A vital telemetry with
 B/C alarm telemetry. The synthetic alert is paused and has no committed
 destination.
 
-Before dissertation screenshots: parameterize the governed bucket, add a real
-onset source or annotation, validate live queries/rendering against final
+Before dissertation screenshots: load the rendered governed-bucket assets, add
+a stable experiment-run/absolute-onset/episode source, validate live queries against final
 telemetry, and exercise only an approved synthetic notification destination.
 The local `ALARMS` stream is not evidence of external notification delivery.
 

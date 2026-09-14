@@ -28,7 +28,7 @@ groups:
               intervalMs: 1000
               maxDataPoints: 43200
               query: >-
-                from(bucket: "vitals")
+                from(bucket: "__INFLUX_BUCKET__")
                   |> range(start: -1m)
                   |> filter(fn: (r) => r._measurement == "alarms" and r._field == "news2_score")
                   |> filter(fn: (r) => r.alarm_level == "critical" and r.scenario_id != "none")

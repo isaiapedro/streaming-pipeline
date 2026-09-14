@@ -43,10 +43,12 @@ class NatsConsumerContract:
         expected = {
             "durable_name": self.durable_name,
             "filter_subject": self.filter_subject,
+            "deliver_policy": "all",
             "ack_policy": "explicit",
             "ack_wait": self.ack_wait_s,
             "max_deliver": self.max_deliver,
             "max_ack_pending": self.max_ack_pending,
+            "replay_policy": "instant",
         }
         observed: dict[str, Any] = {}
         is_mapping = isinstance(actual, Mapping)

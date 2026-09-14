@@ -6,6 +6,7 @@ import pytest
 from brain.approaches import BatchScheduler
 from brain.mqtt_consumer import _handle_delivery
 from producer.mqtt_producer import MqttPublisher
+from schema import vitals_pb2
 
 
 class PublishInfo:
@@ -84,6 +85,9 @@ async def test_invalid_mqtt_payload_is_dlq_confirmed_before_source_ack():
     assert operations == ["publish", "ack"]
     assert client.calls[0][1] == "dlq/vitals/mqtt"
     assert info.waits == [5.0]
+    envelope = vitals_pb2.DeadLetterEnvelope.FromString(client.calls[0][2])
+    assert envelope.source_transport == "mqtt"
+    assert envelope.source_topic == "vitals/P-001/heart_rate"
 
 
 @pytest.mark.asyncio

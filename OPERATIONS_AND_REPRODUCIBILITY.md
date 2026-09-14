@@ -379,14 +379,12 @@ Official NATS consumer semantics:
 Final evidence must start from a clean, identified commit. Do not regenerate
 release evidence while another worker is editing the worktree.
 
-At the time of this guide's update, the runner, aggregate, run provenance,
-figures, manifest, and checksums contain the complete 450-row crossed-seed
-design. The stable-baseline rows record the requested 86,400 seconds. Metric
-semantics use debounced episodes, Wilson intervals for probabilities, and
-bootstrap intervals plus quartiles for other outcomes. Because the worktree is
-still dirty, these are complete development results rather than a frozen
-submission package. Regenerate them together after the implementation is
-committed; do not edit CSV files manually.
+The frozen offline package contains the complete 450-row crossed-seed design
+and a portable final attestation. The stable-baseline rows record 86,400
+seconds. Metric semantics use debounced episodes, Wilson intervals for
+probabilities, and bootstrap intervals plus quartiles for other outcomes. A new
+implementation commit requires a new governed evidence chain; do not edit CSV
+files manually.
 
 Preflight:
 
@@ -428,6 +426,31 @@ rejects any intervening change outside `evidence/` and the exact governed root
 artifact `benchmark_results.csv`; the manifest records both the measured
 implementation and attestation-base commits. Commit the final
 manifest and checksums as a second evidence-only attestation commit.
+
+### Recover an interrupted benchmark
+
+The runner writes a hidden journal beside the run log after every seed cell.
+Each append is flushed and `fsync`ed before the next cell begins. Public output
+files are replaced atomically only after all cells complete, so an interrupted
+run does not partially overwrite the last reviewed package.
+
+Resume with the identical commit, `PIPELINE_VERSION`, seeds, scenarios,
+durations, clear-hold setting, and noise configuration:
+
+```bash
+PIPELINE_VERSION=CLEAN_COMMIT_OR_TAG .venv/bin/python scripts/run_benchmark.py \
+  --signal-seeds 5 --noise-seeds 5 \
+  --stable-duration-s 86400 --clear-hold-ms 10000 \
+  --out benchmark_results.csv \
+  --run-log evidence/experiment_runs.jsonl \
+  --resume
+```
+
+Resume fails closed if the journal is missing, corrupt at a complete record,
+contains an unknown cell, or has a different protocol fingerprint. It repairs
+only an incomplete final append. To start a deliberately different run, retain
+or archive the existing journal as governed evidence before selecting a new
+journal path with `--journal`; never silently overwrite it.
 
 The notebook may explore or display results, but it is not an authoritative
 transformation. All release tables and figures must be reproducible through

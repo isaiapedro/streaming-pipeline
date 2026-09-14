@@ -181,6 +181,16 @@ The attestation releases the bounded offline evidence package only. It is not
 approval for broader operational, external-validity, production, or clinical
 claims.
 
+The superseding crash-recoverable evidence chain is:
+
+- measured implementation: `d71793c954ebc043a47a245b2f0ac21589fa6a2a`;
+- reviewed evidence base: `d71f7d5a718171321c8ac756ca74e891c1f270bc`;
+- portable attestation: `aa98b248726d30ae59d567b4e91ad2a61e6a4fe6`.
+
+It reproduced the 450 raw metric rows and derived figures while upgrading the
+run provenance to schema v2. The earlier chain remains historical evidence at
+its own commits; it is no longer the current bounded package identity.
+
 ## Decisions requiring an owner
 
 | ID | Owner | Decision required | Blocks |

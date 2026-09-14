@@ -255,14 +255,19 @@ hospital-scale capacity, or suitability for real patient data.
 
 | Role | Commit |
 | --- | --- |
-| Measured implementation | `70ff39ffe0725f4d89d663c5bcbef6d3c2beaefb` |
-| Reviewed evidence base | `044f8eb8050ce44452fc22dea3dd3b89005d10a5` |
-| Portable final attestation | `edadcc6c8a1cad23311b8c6fdb804dcac94b4c58` |
+| Measured implementation | `d71793c954ebc043a47a245b2f0ac21589fa6a2a` |
+| Reviewed evidence base | `d71f7d5a718171321c8ac756ca74e891c1f270bc` |
+| Portable final attestation | `aa98b248726d30ae59d567b4e91ad2a61e6a4fe6` |
 
 The manifest's `eligible_for_final_release=true` applies to the frozen offline
 evidence package. It does not close the broader project, operational,
 external-data, retention, or clinical claim gates recorded in `DECISIONS.md`
 and `IMPLEMENTATION_BLUEPRINT.md`.
+
+The current attestation regenerates the complete 150-cell/450-row benchmark
+from a clean implementation commit using provenance schema v2. The raw metrics
+and derived figures reproduced byte-for-byte; the run log, manifest, and
+checksums changed to bind the durable journal protocol and new commit identity.
 
 ## Maintained authorities
 

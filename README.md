@@ -1,5 +1,9 @@
 # Patient Monitoring Streaming Pipeline — Architecture Plan
 
+> A pragmatic, event-driven design for turning synthetic patient vitals into observable, actionable time-series data.
+
+**Portfolio focus:** asynchronous Python · durable messaging · time-series observability · cloud-aware architecture trade-offs
+
 ## Context
 
 Building a real-time patient vitals monitoring system in two scopes:
@@ -39,6 +43,12 @@ Grafana Cloud (free tier)
 - ZSTD batch compression
 - Raw ECG waveform at 250Hz (too many writes for free tier; use heart_rate scalar instead)
 - Mobile application
+
+## Engineering highlights
+
+- **Decoupled ingestion:** producers and consumers communicate through NATS JetStream rather than direct calls.
+- **Operationally proportionate:** the MVP uses a lightweight edge buffer and managed observability services before introducing Kafka or Spark.
+- **Clear evolution path:** the repository documents both the six-patient MVP and the constraints that justify a later hospital-scale design.
 
 ---
 

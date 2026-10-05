@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 SIGNALS = ("heart_rate", "spo2", "systolic_bp", "respiratory_rate", "temperature")
+SIGNAL_LABELS = ("Heart rate", "SpO2", "Systolic BP", "Respiratory rate", "Temperature")
 
 
 def kl_synthetic_reference(reference: np.ndarray, synthetic: np.ndarray, bins: int = 30) -> float:
@@ -43,12 +44,96 @@ kl_divergence = kl_synthetic_reference
 
 
 def load_reference(path: Path) -> dict[str, np.ndarray]:
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Input CSV not found: {path}. Replace documentation placeholders with a real local path."
+        )
     with path.open(newline="") as handle:
         rows = list(csv.DictReader(handle))
     missing = [signal for signal in SIGNALS if not rows or signal not in rows[0]]
     if missing:
         raise ValueError(f"Reference CSV is missing columns: {', '.join(missing)}")
     return {signal: np.array([float(row[signal]) for row in rows], dtype=float) for signal in SIGNALS}
+
+
+def correlation_matrix(values: dict[str, np.ndarray]) -> np.ndarray:
+    """Return a finite Pearson matrix using complete rows across all signals."""
+
+    matrix = np.column_stack([values[signal] for signal in SIGNALS])
+    complete = matrix[np.isfinite(matrix).all(axis=1)]
+    if len(complete) < 2:
+        raise ValueError("At least two complete finite rows are required for correlation")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        result = np.corrcoef(complete, rowvar=False)
+    # A constant signal has undefined Pearson correlation. Retain the useful
+    # diagonal identity and label unavailable cross-signal cells as NaN.
+    np.fill_diagonal(result, 1.0)
+    return result
+
+
+def _plot_kl(metrics: list[dict], path: Path) -> None:
+    values = [float(row["kl_synthetic_reference"]) for row in metrics]
+    fig, axis = plt.subplots(figsize=(9, 4.5), constrained_layout=True)
+    bars = axis.barh(SIGNAL_LABELS, values, color="#4C78A8")
+    axis.bar_label(bars, labels=[f"{value:.4f}" for value in values], padding=4)
+    axis.set(
+        xlabel="KL divergence, synthetic → reference (lower means closer)",
+        title="Per-signal distribution divergence",
+    )
+    axis.grid(axis="x", alpha=0.2)
+    axis.text(
+        0,
+        -0.18,
+        "KL is directional and has no universal pass/fail threshold; interpret with the overlays.",
+        transform=axis.transAxes,
+        fontsize=9,
+    )
+    fig.savefig(path, dpi=180)
+    plt.close(fig)
+
+
+def _plot_correlations(reference: np.ndarray, synthetic: np.ndarray, path: Path) -> None:
+    difference = synthetic - reference
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5), constrained_layout=True)
+    panels = (
+        (reference, "Reference correlation", -1.0, 1.0),
+        (synthetic, "Synthetic correlation", -1.0, 1.0),
+        (difference, "Synthetic − reference", -2.0, 2.0),
+    )
+    for axis, (matrix, title, low, high) in zip(axes, panels):
+        image = axis.imshow(matrix, cmap="coolwarm", vmin=low, vmax=high)
+        axis.set_title(title)
+        axis.set_xticks(range(len(SIGNALS)), SIGNAL_LABELS, rotation=45, ha="right")
+        axis.set_yticks(range(len(SIGNALS)), SIGNAL_LABELS)
+        for row in range(len(SIGNALS)):
+            for column in range(len(SIGNALS)):
+                value = matrix[row, column]
+                label = "N/A" if np.isnan(value) else f"{value:.2f}"
+                axis.text(column, row, label, ha="center", va="center", fontsize=8)
+        fig.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
+    fig.suptitle("Inter-signal Pearson correlation structure")
+    fig.savefig(path, dpi=180)
+    plt.close(fig)
+
+
+def _write_correlations(reference: np.ndarray, synthetic: np.ndarray, path: Path) -> None:
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["signal_x", "signal_y", "reference_pearson_r", "synthetic_pearson_r", "difference"],
+        )
+        writer.writeheader()
+        for row, signal_x in enumerate(SIGNALS):
+            for column, signal_y in enumerate(SIGNALS):
+                ref_value = reference[row, column]
+                syn_value = synthetic[row, column]
+                writer.writerow({
+                    "signal_x": signal_x,
+                    "signal_y": signal_y,
+                    "reference_pearson_r": "" if np.isnan(ref_value) else f"{ref_value:.8f}",
+                    "synthetic_pearson_r": "" if np.isnan(syn_value) else f"{syn_value:.8f}",
+                    "difference": "" if np.isnan(ref_value) or np.isnan(syn_value) else f"{syn_value - ref_value:.8f}",
+                })
 
 
 def validate(
@@ -67,16 +152,38 @@ def validate(
 
     metrics = []
     fig, axes = plt.subplots(len(SIGNALS), 1, figsize=(10, 14), constrained_layout=True)
+    reference_label = f"reference ({source_id.replace('_', ' ')})"
+    synthetic_handle = reference_handle = None
     for axis, signal in zip(axes, SIGNALS):
         kl = kl_synthetic_reference(reference[signal], synthetic[signal])
         metrics.append({"signal": signal, "kl_synthetic_reference": f"{kl:.8f}", "bins": 30})
-        axis.hist(reference[signal], bins=30, density=True, alpha=.55, label=f"reference ({source_id})")
-        axis.hist(synthetic[signal], bins=30, density=True, alpha=.55, label="synthetic")
-        axis.set_title(f"{signal}: KL={kl:.4f}")
-        axis.set_ylabel("Density")
-        axis.legend()
+        reference_handle = axis.hist(reference[signal], bins=30, density=True, alpha=.55, label=reference_label)[2][0]
+        synthetic_handle = axis.hist(synthetic[signal], bins=30, density=True, alpha=.55, label="synthetic")[2][0]
+        axis.set_title(f"{SIGNAL_LABELS[SIGNALS.index(signal)]} — KL={kl:.4f}", fontsize=16, fontweight="bold")
+        axis.set_ylabel("Density", fontsize=14)
+        axis.tick_params(labelsize=12)
+    axes[0].legend(
+        [reference_handle, synthetic_handle],
+        [reference_label, "synthetic"],
+        loc="upper right",
+        fontsize=11,
+        frameon=True,
+    )
     fig.savefig(out_dir / "synthetic_vs_reference.png", dpi=180)
     plt.close(fig)
+    _plot_kl(metrics, out_dir / "kl_divergence.png")
+    reference_correlation = correlation_matrix(reference)
+    synthetic_correlation = correlation_matrix(synthetic)
+    _plot_correlations(
+        reference_correlation,
+        synthetic_correlation,
+        out_dir / "inter_signal_correlation.png",
+    )
+    _write_correlations(
+        reference_correlation,
+        synthetic_correlation,
+        out_dir / "correlation_matrix.csv",
+    )
     with (out_dir / "kl_divergence.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=["signal", "kl_synthetic_reference", "bins"])
         writer.writeheader()
@@ -90,7 +197,8 @@ def validate(
                 "synthetic_rows": len(next(iter(synthetic.values()))),
                 "kl_definition": "KL(P_synthetic || P_reference) using 30 shared histogram bins and additive smoothing epsilon=1e-12",
                 "kl_direction": "synthetic_to_reference",
-                "privacy_boundary": "Only aggregate histogram figures and KL metrics are emitted; source rows remain external.",
+                "correlation_definition": "Pearson correlation over complete finite rows within each dataset",
+                "privacy_boundary": "Only aggregate distribution/correlation figures and metrics are emitted; source rows remain external.",
             },
             handle,
             indent=2,

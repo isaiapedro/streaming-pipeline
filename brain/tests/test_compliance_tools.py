@@ -42,7 +42,31 @@ def test_traceability_audit_is_aggregate_and_reports_missing_tags():
 def test_traceability_audit_passes_only_when_every_record_is_complete():
     complete = {"_measurement": "alarms", **{tag: "opaque" for tag in REQUIRED_TAGS}}
     assert audit_rows([complete], "test")["status"] == "passed"
-    assert audit_rows([], "test")["status"] == "no_records"
+    assert audit_rows([], "test")["status"] == "unexecuted"
+
+
+def test_traceability_audit_reports_transport_and_version_metrics_without_values():
+    rows = [
+        {"_measurement": "patient_vitals", **{tag: "one" for tag in REQUIRED_TAGS}, "transport": "nats"},
+        {"_measurement": "alarms", **{tag: "two" for tag in REQUIRED_TAGS}, "transport": "mqtt"},
+        {"_measurement": "alarms", **{tag: "secret" for tag in REQUIRED_TAGS}, "transport": "private-broker",
+         "schema_version": "unknown", "pipeline_version": "", "threshold_version": None},
+    ]
+
+    result = audit_rows(rows, "test")
+
+    assert result["by_transport"]["nats"]["records"] == 1
+    assert result["by_transport"]["mqtt"]["measurements"]["alarms"] == 1
+    assert result["by_transport"]["unknown"]["records"] == 1
+    assert result["versions"]["schema_version"] == {
+        "distinct_known_values": 2, "unknown_records": 1, "mixed_known_values": True,
+    }
+    assert result["versions"]["pipeline_version"]["unknown_records"] == 1
+    assert result["tag_coverage"]["pipeline_version"] == {"present": 2, "pct": pytest.approx(200 / 3)}
+    assert result["has_unknown_versions"] and result["has_mixed_versions"]
+    encoded = json.dumps(result)
+    assert "private-broker" not in encoded
+    assert "secret" not in encoded
 
 
 def test_traceability_csv_requires_a_measurement_column(tmp_path):
@@ -158,6 +182,9 @@ async def test_storage_reconciliation_accounts_for_delivery_without_identifiers(
     assert result["status"] == "complete"
     assert result["accepted_source_messages"] == 1
     assert result["derived_records_enqueued"] == result["delivered_records"] == 1
+    assert result["missing_from_storage"] == 0
+    assert result["excess_in_storage"] == 0
+    assert result["unaccounted_enqueued_records"] == 0
     serialized = json.dumps(result)
     assert "P-001" not in serialized
     assert "outbox.sqlite3" not in serialized
@@ -207,6 +234,32 @@ def test_storage_reconciliation_reports_unmigrated_schema_without_crashing(tmp_p
     assert result["missing_tables"] == [
         "outbox_counters", "outbox_meta", "outbox_quarantine", "source_receipts"
     ]
+
+
+def test_storage_reconciliation_reports_missing_and_excess_counts(tmp_path):
+    path = tmp_path / "outbox.sqlite3"
+    writer = InfluxWriter(outbox_path=path)
+    writer._open_outbox()
+    writer._db.execute(
+        "INSERT OR REPLACE INTO outbox_counters(name, value) VALUES('delivered_records', 3)"
+    )
+    writer._db.commit()
+    writer._db.close()
+
+    missing = reconcile_storage(path, stored_records=1)
+    excess = reconcile_storage(path, stored_records=5)
+    assert missing["missing_from_storage"] == 2 and missing["excess_in_storage"] == 0
+    assert excess["missing_from_storage"] == 0 and excess["excess_in_storage"] == 2
+
+
+def test_storage_reconciliation_zero_activity_is_unexecuted(tmp_path):
+    path = tmp_path / "outbox.sqlite3"
+    writer = InfluxWriter(outbox_path=path)
+    writer._open_outbox()
+    writer._db.close()
+
+    result = reconcile_storage(path, stored_records=0)
+    assert result["status"] == "unexecuted"
 
 
 @pytest.mark.asyncio

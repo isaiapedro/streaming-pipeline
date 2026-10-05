@@ -28,7 +28,25 @@ REQUIRED_TAGS = (
     "transport",
 )
 ALLOWED_MEASUREMENTS = {"patient_vitals", "alarms"}
+ALLOWED_TRANSPORTS = {"nats", "mqtt", "kafka", "in_process"}
+VERSION_TAGS = ("schema_version", "pipeline_version", "threshold_version")
+_UNKNOWN_VERSION_VALUES = {"", "unknown", "unset", "none", "null", "n/a", "na"}
 _RANGE_PATTERN = re.compile(r"^[1-9][0-9]*[smhdw]$")
+
+
+def _coverage(total: int, complete: int, present: Mapping[str, int]) -> dict:
+    return {
+        "records": total,
+        "complete_records": complete,
+        "complete_pct": (100.0 * complete / total) if total else None,
+        "tag_coverage": {
+            tag: {
+                "present": present.get(tag, 0),
+                "pct": (100.0 * present.get(tag, 0) / total) if total else None,
+            }
+            for tag in REQUIRED_TAGS
+        },
+    }
 
 
 def audit_rows(rows: Iterable[Mapping[str, object]], source: str) -> dict:
@@ -37,6 +55,12 @@ def audit_rows(rows: Iterable[Mapping[str, object]], source: str) -> dict:
     totals: dict[str, int] = defaultdict(int)
     complete: dict[str, int] = defaultdict(int)
     present: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    transport_totals: dict[str, int] = defaultdict(int)
+    transport_complete: dict[str, int] = defaultdict(int)
+    transport_present: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    transport_measurements: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    version_values: dict[str, set[str]] = {tag: set() for tag in VERSION_TAGS}
+    unknown_versions: dict[str, int] = defaultdict(int)
     ignored = 0
     for row in rows:
         measurement = str(row.get("_measurement") or row.get("measurement") or "unknown")
@@ -48,34 +72,52 @@ def audit_rows(rows: Iterable[Mapping[str, object]], source: str) -> dict:
         for tag in REQUIRED_TAGS:
             value = row.get(tag)
             flags[tag] = value is not None and bool(str(value).strip())
+            if tag in VERSION_TAGS and str(value or "").strip().lower() in _UNKNOWN_VERSION_VALUES:
+                flags[tag] = False
             present[measurement][tag] += int(flags[tag])
+        raw_transport = str(row.get("transport") or "").strip().lower()
+        transport = raw_transport if raw_transport in ALLOWED_TRANSPORTS else "unknown"
+        transport_totals[transport] += 1
+        transport_measurements[transport][measurement] += 1
+        for tag in REQUIRED_TAGS:
+            transport_present[transport][tag] += int(flags[tag])
+        transport_complete[transport] += int(all(flags.values()))
+        for tag in VERSION_TAGS:
+            value = str(row.get(tag) or "").strip()
+            if value.lower() in _UNKNOWN_VERSION_VALUES:
+                unknown_versions[tag] += 1
+            else:
+                version_values[tag].add(value)
         complete[measurement] += int(all(flags.values()))
 
     by_measurement = {}
     for measurement in sorted(ALLOWED_MEASUREMENTS):
         total = totals[measurement]
-        by_measurement[measurement] = {
-            "records": total,
-            "complete_records": complete[measurement],
-            "complete_pct": (100.0 * complete[measurement] / total) if total else None,
-            "tag_coverage": {
-                tag: {
-                    "present": present[measurement][tag],
-                    "pct": (100.0 * present[measurement][tag] / total) if total else None,
-                }
-                for tag in REQUIRED_TAGS
-            },
+        by_measurement[measurement] = _coverage(total, complete[measurement], present[measurement])
+    by_transport = {}
+    for transport in sorted(transport_totals):
+        summary = _coverage(
+            transport_totals[transport], transport_complete[transport], transport_present[transport]
+        )
+        summary["measurements"] = {
+            measurement: transport_measurements[transport][measurement]
+            for measurement in sorted(ALLOWED_MEASUREMENTS)
         }
+        by_transport[transport] = summary
     total_records = sum(totals.values())
     total_complete = sum(complete.values())
+    overall_present = {
+        tag: sum(present[measurement][tag] for measurement in ALLOWED_MEASUREMENTS)
+        for tag in REQUIRED_TAGS
+    }
     if not total_records:
-        status = "no_records"
+        status = "unexecuted"
     elif total_complete == total_records:
         status = "passed"
     else:
         status = "incomplete"
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "privacy_classification": "aggregate tag-presence coverage; no tag values or measured values",
         "source": source,
@@ -83,9 +125,21 @@ def audit_rows(rows: Iterable[Mapping[str, object]], source: str) -> dict:
         "records": total_records,
         "complete_records": total_complete,
         "complete_pct": (100.0 * total_complete / total_records) if total_records else None,
+        "tag_coverage": _coverage(total_records, total_complete, overall_present)["tag_coverage"],
         "ignored_records": ignored,
         "required_tags": list(REQUIRED_TAGS),
         "by_measurement": by_measurement,
+        "by_transport": by_transport,
+        "versions": {
+            tag: {
+                "distinct_known_values": len(version_values[tag]),
+                "unknown_records": unknown_versions[tag],
+                "mixed_known_values": len(version_values[tag]) > 1,
+            }
+            for tag in VERSION_TAGS
+        },
+        "has_unknown_versions": any(unknown_versions.values()),
+        "has_mixed_versions": any(len(values) > 1 for values in version_values.values()),
     }
 
 

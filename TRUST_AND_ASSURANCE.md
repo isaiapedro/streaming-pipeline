@@ -310,16 +310,24 @@ The test strategy uses several layers:
 | Security/privacy tests | Credential pairing, TLS hostname, no-clobber certificates, sanitized errors/logs, private outbox, symlink rejection |
 | Contract-drift tests | NATS streams/consumers, Kafka topics/configuration, Schema Registry compatibility |
 | Evidence tests | 5×5 crossed seeds, 450 rows, 150 runs, 24-hour stable cells, dirty final-mode refusal, hashes |
+| Noise/fault experiment tests | Paired clean/noise/dropout effects, recovery/completeness metrics, transport delivery accounting, restart/rebalance/offset/schema fault orchestration, fail-closed evidence writers |
 | Dashboard tests | Datasource identity, TLS verification, filters, A/B/C query semantics, paused alert default |
 | Optional live tests | NATS valid/DLQ/ALARMS, MQTT PUBACK/DLQ, Kafka schema/DLQ, secure TLS, parity |
 
 The frozen post-attestation offline gate passed 226 tests; the current integrated
-development tree passes 238 tests. Both have five optional live tests skipped.
+development tree passes 288 tests. Both have five optional live tests skipped.
 Those skips mean “not executed in this offline command,” not “passed.”
 Separate live checks passed the NATS valid/DLQ/ALARMS paths, MQTT invalid-DLQ
 ordering, Kafka schema/DLQ paths, secure NATS positive/negative probes, and a
 parity run with 10 valid acceptances plus one intentional rejection on each
 transport.
+
+The current development tree also implements a paired synthetic noise/dropout
+matrix, measurable traceability schema v2, transport-neutral NATS/MQTT fault
+orchestration, and Kafka restart/rebalance/schema fault APIs. These are V0
+implementation claims only. No retained live fault artifact exists, and the
+new noise matrix has not been frozen as evidence; the manifest therefore keeps
+those entries `unexecuted`.
 
 Final evidence requires rerunning all applicable tests from the selected clean
 commit and exact environment. Restart, broker interruption, replay,
@@ -343,6 +351,8 @@ remain incomplete.
   dependency, artifact, or attestation blockers exist.
 
 The bounded offline evidence package has a clean, portable final attestation.
+That historical attestation predates the new experiment implementations and
+is not silently expanded by their presence.
 Protocol restart dimensions, successful-storage latency, scale T2–T4,
 external-reference validation, live traceability, and Grafana/alert evidence
 remain `unexecuted` or partial and are not covered by that attestation.
@@ -403,6 +413,8 @@ The following gaps are explicitly tracked rather than hidden:
 - execution of broker/input/outbox/Influx reconciliation on final telemetry;
 - dependence-aware inference and predeclared sensitivity analysis;
 - controlled restart, fault, replay, persistence, and memory tests;
+- execution and retention of the paired noise/dropout scoring matrix;
+- a governed Kafka fault writer/live adapter and retained fault results;
 - successful-storage latency;
 - accepted T2–T4 scale evidence;
 - approved external-reference validation;

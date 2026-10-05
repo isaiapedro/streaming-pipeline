@@ -14,12 +14,14 @@ ASSETS = (
     Path("dashboards/dashboard.yml"),
     Path("dashboards/vitals.json"),
     Path("dashboards/comparison.json"),
+    Path("dashboards/presentation.json"),
     Path("alerting/rules.yml"),
     Path("datasources/influxdb.yml"),
 )
 TEMPLATED_ASSETS = {
     Path("dashboards/vitals.json"),
     Path("dashboards/comparison.json"),
+    Path("dashboards/presentation.json"),
     Path("alerting/rules.yml"),
 }
 BUCKET_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")

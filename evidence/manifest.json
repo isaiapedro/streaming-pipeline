@@ -14,7 +14,7 @@
         "path": "benchmark_results.csv",
         "record_count": 450,
         "role": "raw_benchmark_input",
-        "sha256": "7eff00fe04d286012227c290f46ca9144260f8fc46bdc64ba09987004a5bccfd",
+        "sha256": "e79b76fc24f27ab22eb397f6f43340dd8b75292d80deeced3cc11cbac5ced1e9",
         "tracked": true
       },
       "run_log": {
@@ -22,11 +22,13 @@
         "path": "evidence/experiment_runs.jsonl",
         "record_count": 150,
         "role": "run_provenance",
-        "sha256": "36b222532b1dfccd470f3469bc5dec04075c8c368c800aaa8d91571974a01cc3",
+        "sha256": "a28453a944ec6054ce855a3b35d6c431ebc81de29cd2df0cb99a279a4ff63c71",
         "tracked": true
       },
-      "validation_errors": [],
-      "validation_status": "valid"
+      "validation_errors": [
+        "run log was generated from a dirty or unknown worktree"
+      ],
+      "validation_status": "development_only"
     },
     "confidence_interval": "Wilson 95% interval for run probabilities; deterministic 2,000-resample bootstrap 95% interval for metric means",
     "design": "fully crossed 5 x 5 signal/noise seeds; identical cells for A/B/C",
@@ -45,8 +47,8 @@
         "media_type": "text/markdown",
         "path": "evidence/FIGURE_CAPTIONS.md",
         "role": "figure_captions",
-        "sha256": "3f76dc73e426e7552444dd67d9e2d69a3b4e01b45bc0bac9df255fb16d97ddf7",
-        "size_bytes": 2381,
+        "sha256": "a6b58a04ee8532e117e0d0bf12e5054ac7972908dd4ebe8c3b9d748c8a8f031e",
+        "size_bytes": 2387,
         "tracked": true
       },
       {
@@ -54,8 +56,8 @@
         "media_type": "text/markdown",
         "path": "evidence/LIMITATIONS.md",
         "role": "supporting_evidence",
-        "sha256": "243521ad7401aecb33805a8eb20eedf0f3e5f47ffcb7af497a6fe5505daf7ff1",
-        "size_bytes": 2444,
+        "sha256": "b81eca818868c568ac3b1a4c725878bb36412ecccf02ab932a0de4a2f178a5db",
+        "size_bytes": 2416,
         "tracked": true
       },
       {
@@ -81,8 +83,8 @@
         "media_type": "text/csv",
         "path": "evidence/benchmark_aggregate.csv",
         "role": "derived_aggregate",
-        "sha256": "4544707c4bdb6bb540ced3d2b806308a304edd2e9e3a5a17c583aea4fb383d5c",
-        "size_bytes": 11930,
+        "sha256": "0c03108f151545445a4b050f8c0cfc88b7ea2ff52f0888ca80e277cf4376463e",
+        "size_bytes": 12525,
         "tracked": true
       },
       {
@@ -90,8 +92,8 @@
         "media_type": "application/octet-stream",
         "path": "evidence/experiment_runs.jsonl",
         "role": "run_provenance",
-        "sha256": "36b222532b1dfccd470f3469bc5dec04075c8c368c800aaa8d91571974a01cc3",
-        "size_bytes": 101862,
+        "sha256": "a28453a944ec6054ce855a3b35d6c431ebc81de29cd2df0cb99a279a4ff63c71",
+        "size_bytes": 101720,
         "tracked": true
       },
       {
@@ -153,9 +155,18 @@
         "media_type": "image/png",
         "path": "evidence/figures/evidence_status.png",
         "role": "figure",
-        "sha256": "89df6bf98645a0c8020c9f7d9a5cc4e4cf3f93f5969f3b1e179b779512d07c06",
-        "size_bytes": 157893,
+        "sha256": "040963d736b252a7b0ee915f603c3c2bf446cce534dc71dbfad6fa58e1fd3536",
+        "size_bytes": 158253,
         "tracked": true
+      },
+      {
+        "generated_by": "scripts/generate_evidence_status.py",
+        "media_type": "image/png",
+        "path": "evidence/figures/how-news2-works.png",
+        "role": "figure",
+        "sha256": "d96cc61750cb68a556203230d21287251d8547daeffbfb9de6c76bfbcfbb7bc9",
+        "size_bytes": 1815707,
+        "tracked": false
       },
       {
         "generated_by": "scripts/generate_evidence_status.py",
@@ -171,8 +182,8 @@
         "media_type": "image/png",
         "path": "evidence/figures/scale_status.png",
         "role": "figure",
-        "sha256": "9faece79f171036f1a4b40e401d7173db5f13341aaeb30952ce0850dbcfd3aa0",
-        "size_bytes": 63178,
+        "sha256": "3e2347e83ddcda595fa85dc41c460c477d0180096a85ffc702abf282f3ef5bdc",
+        "size_bytes": 63418,
         "tracked": true
       },
       {
@@ -203,6 +214,15 @@
         "tracked": true
       },
       {
+        "generated_by": "maintained documentation",
+        "media_type": "text/csv",
+        "path": "evidence/noise_scoring_experiment.csv",
+        "role": "supporting_evidence",
+        "sha256": "a4640283f851753f06223debd095e1e9e6e0a3462b0d07a24df027eef880d639",
+        "size_bytes": 1483700,
+        "tracked": false
+      },
+      {
         "generated_by": "scripts/benchmark_protocol.py",
         "media_type": "text/csv",
         "path": "evidence/protocol_benchmark.csv",
@@ -212,7 +232,7 @@
         "tracked": true
       },
       {
-        "generated_by": "scripts/run_scale_tier.py",
+        "generated_by": "maintained documentation",
         "media_type": "application/json",
         "path": "evidence/scale_T1.json",
         "role": "supporting_evidence",
@@ -277,10 +297,10 @@
     ]
   },
   "code": {
-    "attestation_base_commit": "d71f7d5a718171321c8ac756ca74e891c1f270bc",
-    "implementation_commit": "d71793c954ebc043a47a245b2f0ac21589fa6a2a",
+    "attestation_base_commit": "b702206dd46f105a72a5a5ca8ec2f84b71ecb142",
+    "implementation_commit": "b702206dd46f105a72a5a5ca8ec2f84b71ecb142",
     "note": "The implementation commit produced the run log; the attestation base may add evidence/ artifacts only.",
-    "worktree_dirty": false
+    "worktree_dirty": true
   },
   "commands": {
     "benchmark_aggregate": "python scripts/aggregate_benchmark.py --input benchmark_results.csv --output evidence/benchmark_aggregate.csv --figures-dir evidence/figures",
@@ -291,9 +311,11 @@
     "evidence_status_figure": "MPLCONFIGDIR=/tmp/matplotlib-academic python3 scripts/generate_evidence_status.py",
     "final_manifest": "python3 scripts/build_evidence_manifest.py --mode final",
     "live_latency": "python scripts/measure_live_latency.py --count 100 --skip-storage --csv-out evidence/live_latency.csv --json-out evidence/live_latency.json",
+    "nats_mqtt_fault_matrix": "python3 scripts/run_protocol_fault_experiment.py --live --adapter-module APPROVED_ADAPTER_MODULE --implementation-commit CLEAN_COMMIT --config /approved/non-secret-config.json --output evidence/nats_mqtt_fault_matrix.json",
+    "noise_scoring_matrix": "python3 scripts/run_noise_scoring_experiment.py --out evidence/noise_scoring_experiment.csv",
     "outbox_health": "python3 scripts/audit_outbox.py --database .runtime/influx_outbox.sqlite3 --output evidence/outbox_health.json --require-healthy",
-    "protocol": "python scripts/benchmark_protocol.py --n 100 --out evidence/protocol_benchmark.csv --skip-restarts",
-    "scale_tier": "python scripts/run_scale_tier.py --tier T1 --duration 10 --pull-timeout 0.1 --nats-url nats://localhost:4222 --csv-out evidence/scale_results.csv --json-out evidence/scale_T1.json",
+    "protocol": "python scripts/benchmark_protocol.py --n 10000 --out evidence/protocol_benchmark.csv --skip-restarts",
+    "scale_tier": "python scripts/run_scale_tier.py --tier T2 --duration 20 --pull-timeout 0.1 --nats-url nats://localhost:4222 --csv-out evidence/scale_results.csv --json-out evidence/scale_T2.json",
     "storage_reconciliation": "python3 scripts/reconcile_storage.py --database .runtime/influx_outbox.sqlite3 --stored-count COUNT --output evidence/storage_reconciliation.json --require-complete",
     "tests": "python3 -m pytest -q",
     "traceability_audit_export": "python3 scripts/audit_traceability.py --input-csv /approved/export.csv --output evidence/traceability_audit.json --require-complete",
@@ -327,12 +349,33 @@
     "status": "unexecuted",
     "transformation_method": null
   },
-  "generated_at_utc": "2026-09-14T00:55:58.937523+00:00",
+  "generated_at_utc": "2026-09-20T20:54:22.414459+00:00",
   "live_experiments": {
     "benchmark_run_provenance": {
       "artifact": "evidence/experiment_runs.jsonl",
       "contains_raw_vitals": false,
       "records_expected": 150,
+      "status": "executed"
+    },
+    "kafka_fault_matrix": {
+      "artifact": null,
+      "privacy": "aggregate delivery, recovery, offset, rebalance, schema, and resource counters",
+      "reason": "No retained governed result artifact exists.",
+      "record_count": null,
+      "status": "unexecuted"
+    },
+    "nats_mqtt_fault_matrix": {
+      "artifact": null,
+      "privacy": "aggregate delivery, recovery, ordering, duplicate, and resource counters",
+      "reason": "No retained governed result artifact exists.",
+      "record_count": null,
+      "status": "unexecuted"
+    },
+    "noise_scoring_matrix": {
+      "artifact": "evidence/noise_scoring_experiment.csv",
+      "privacy": "aggregate synthetic paired effects; no raw vital time series",
+      "reason": "Status is derived from the retained artifact; implementation and unit tests alone do not count as execution.",
+      "record_count": 8100,
       "status": "executed"
     },
     "outbox_health_audit": {
@@ -361,13 +404,17 @@
       "status": "unexecuted"
     }
   },
-  "manifest_version": 5,
+  "manifest_version": 6,
   "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
   "release": {
-    "blockers": [],
-    "eligible_for_final_release": true,
+    "blockers": [
+      "run log was generated from a dirty or unknown worktree",
+      "untracked publishable evidence artifacts: evidence/figures/how-news2-works.png, evidence/noise_scoring_experiment.csv",
+      "worktree is dirty"
+    ],
+    "eligible_for_final_release": false,
     "policy": "Development mode records blockers; final mode exits without overwriting the manifest when any blocker exists.",
-    "requested_mode": "final"
+    "requested_mode": "development"
   },
   "runtime": {
     "dependencies": [
@@ -618,7 +665,7 @@
     "machine": {
       "architecture": "x86_64",
       "logical_cpus": 12,
-      "memory_bytes": 33332183040,
+      "memory_bytes": 33332174848,
       "os": "Linux",
       "os_release": "6.12.107+deb13-amd64",
       "python_version": "3.13.5"
@@ -627,19 +674,6 @@
     "requirements_sha256": "85c4e502d7260068d6e1899e7130bef45384c281e29a5bcf08dc5368672abc1c"
   },
   "scale_tiers": [
-    {
-      "achieved_rate_msg_s": 29.98245116339667,
-      "backlog_messages": 0,
-      "duration_s": 10.00585303600019,
-      "p50_latency_ms": 11.25788688659668,
-      "p99_latency_ms": 14.944314956665039,
-      "patients": 6,
-      "reason": "Generated by scripts/run_scale_tier.py; full machine context is in the tier JSON.",
-      "signal_rate_hz": 1.0,
-      "status": "executed",
-      "target_rate_msg_s": 30.0,
-      "tier": "T1"
-    },
     {
       "patients": 24,
       "reason": "Run on approved hardware and replace status only with generated CSV/JSON evidence.",

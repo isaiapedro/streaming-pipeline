@@ -200,7 +200,7 @@ def _tradeoff_chart(aggregate_rows: list[dict], path: Path) -> None:
 
 
 def _paired_latency_chart(raw: list[dict], scenarios: list[str], path: Path) -> None:
-    fig, axes = plt.subplots(2, 2, figsize=(10, 7), sharex=True, sharey=True, constrained_layout=True)
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8.5), sharex=True, sharey=True, constrained_layout=True)
     for axis, scenario in zip(axes.flat, scenarios):
         cells: dict[str, dict[str, float]] = defaultdict(dict)
         for row in raw:
@@ -214,16 +214,17 @@ def _paired_latency_chart(raw: list[dict], scenarios: list[str], path: Path) -> 
             values = [cell[approach] for cell in cells.values() if approach in cell]
             if values:
                 median, q1, q3 = statistics.median(values), _quantile(values, 0.25), _quantile(values, 0.75)
-                axis.errorbar(index, median, yerr=[[median - q1], [q3 - median]], fmt="o", capsize=5, color=COLORS[approach], markersize=7)
-                axis.text(index, max(values) * 1.2, f"{len(values)}/25", ha="center", fontsize=8, color=COLORS[approach])
-        axis.set_title(scenario.replace("_", " "))
+                axis.errorbar(index, median, yerr=[[median - q1], [q3 - median]], fmt="o", capsize=6, color=COLORS[approach], markersize=9)
+                axis.text(index, max(values) * 1.2, f"{len(values)}/25", ha="center", fontsize=13, fontweight="bold", color=COLORS[approach])
+        axis.set_title(scenario.replace("_", " "), fontsize=14, fontweight="bold")
         axis.set_yscale("log")
         axis.grid(axis="y", alpha=0.2)
+        axis.tick_params(labelsize=11)
     for axis in axes[-1]:
-        axis.set_xticks(range(3), [f"Approach {approach}" for approach in APPROACHES])
+        axis.set_xticks(range(3), [f"Approach {approach}" for approach in APPROACHES], fontsize=11)
     for axis in axes[:, 0]:
-        axis.set_ylabel("Scoring latency (s, log scale)")
-    fig.suptitle("Paired seed-cell latency; labels show detected runs / 25")
+        axis.set_ylabel("Scoring latency (s, log scale)", fontsize=12)
+    fig.suptitle("Paired seed-cell latency; labels show detected runs / 25", fontsize=16, fontweight="bold")
     fig.savefig(path, dpi=200)
     plt.close(fig)
 

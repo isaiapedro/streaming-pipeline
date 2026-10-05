@@ -42,10 +42,14 @@ implemented. Remaining work:
    client identity, persistent broker session, and bounded application queue.
    Add a live crash-before-source-ACK test that proves QoS 1 redelivery after
    process restart without claiming durable DLQ archival.
-2. Execute the owner-approved restart, replay, maximum-delivery, persistence,
-   and DLQ de-duplication fault matrix. Keep each unavailable case explicitly
-   `unexecuted`; this is execution evidence, not permission to broaden the
-   transport design.
+2. Bind the implemented transport-neutral NATS/MQTT fault harness to an
+   owner-approved live adapter, then execute restart, disconnect, offline
+   durable recovery, replay, maximum-delivery, persistence, and DLQ
+   de-duplication cases. The governed runner fails closed without `--live` and
+   an approved adapter; keep each unavailable case explicitly `unexecuted`.
+3. Bind the implemented Kafka restart/consumer-restart/group-rebalance and
+   Schema Registry fault APIs to a governed live writer. No Kafka fault CLI or
+   retained result is currently claimed.
 
 The schema descriptor drift gate, source-sequence-aware NATS DLQ identity,
 complete NATS consumer delivery/replay drift enforcement, MQTT DLQ provenance,
@@ -64,20 +68,72 @@ clean full-matrix regeneration, and crash-recoverable per-cell provenance
 journal are complete. The bounded offline package does not need another clean
 rerun. Remaining work and claim extensions are:
 
-1. Implement only the owner-approved dependence-aware paired estimands, Monte
+1. Execute the implemented paired clean/noise/dropout scoring matrix from a
+   clean frozen commit and retain `evidence/noise_scoring_experiment.csv`.
+   Implementation tests do not change its current `unexecuted` evidence state.
+2. Implement only the owner-approved dependence-aware paired estimands, Monte
    Carlo error, non-detection treatment, and sensitivity analysis. The current
    final descriptive benchmark remains valid within its stated scope.
-2. Add publish-to-successful-storage latency evidence or explicitly retain it
+3. Add publish-to-successful-storage latency evidence or explicitly retain it
    as `unexecuted`; do not infer it from local outbox acknowledgement.
-3. Extend protocol evidence beyond current throughput/latency coverage to the
+4. Extend protocol evidence beyond current throughput/latency coverage to the
    declared restart and recovery dimensions, with isolated broker control.
-4. Execute scale tiers T2–T4 or retain each tier as `unexecuted`; do not
-   generalize T1 transport evidence into a 500-patient scoring/storage claim.
-5. Run distribution validation only against an approved external source and
+5. Execute scale tiers T2–T4 or retain each tier as `unexecuted`. T1 is retired
+   from latency/stress evidence and must not appear in active claims or gates.
+6. Run distribution validation only against an approved external source and
    retain non-sensitive source ID, license/DUA status, transformation version,
    direction `KL(P_synthetic || P_reference)`, and hashes—never source rows.
-6. Produce the Agent 2/M5 acceptance report with exact commands, results,
+7. Produce the Agent 2/M5 acceptance report with exact commands, results,
    skipped gates, commit identity, limitations, and evidence-level ceiling.
+
+#### Original-scope T2 transport execution plan
+
+T2 is the original L2 transport experiment, not a full-pipeline capacity test.
+It drives **24 synthetic patients × five signals × 100 Hz = 12,000 messages/s**
+through the producer, NATS JetStream, and an isolated lightweight pull
+consumer.  The runner uses its own `scale.>` stream.  Brain/NEWS2 scoring,
+SQLite outbox persistence, InfluxDB, Grafana, external notification, and
+Kafka are excluded.  A separate NATS-versus-MQTT protocol comparison may use
+the same workload, but is separate evidence and must not be merged with this
+NATS scale result.
+
+**D5 run-freeze gate.** Before an evidence run, the author and infrastructure
+owner record the approved host class and CPU/RAM/disk limits, operating system,
+container/image and Python versions, NATS configuration, implementation
+commit, `--duration`, repetition count, and `--pull-timeout`.  The plan does
+not prescribe a rate that the host must attain: the target is 12,000 messages/s
+and the experiment identifies the measured ceiling.  Configuration changes
+after a run begin create a new run rather than being tuned into its result.
+
+**Execution.**
+
+1. From a clean nested-repository candidate, validate the selected Compose
+   profile and provision the governed NATS streams.  Capture the selected
+   non-secret configuration and machine context before publishing messages.
+2. Run `scripts/run_scale_tier.py --tier T2` with the D5-frozen duration and
+   pull timeout, writing distinct CSV and JSON result paths for every
+   repetition.  Begin a final series in a new result directory; never edit or
+   truncate a prior result CSV.
+3. For each run, retain requested, attempted, published, received, decoded,
+   acknowledged, failed, and peak-backlog counts when the runner provides
+   them, plus achieved rate and P50/P99 publish-to-fetch latency.  Record the
+   first saturated component using measured process/broker observations, not
+   inference from the target rate alone.
+4. Treat P99 above one second as the observed transport ceiling.  If the
+   target is not sustained, report the achieved rate, backlog, and bottleneck;
+   this is a valid T2 finding, not a reason to extrapolate or silently tune the
+   run.
+5. Publish only aggregate, synthetic, non-identifying evidence with the exact
+   command, commit, environment summary, status, and limitation that this
+   result covers producer-to-NATS-to-pull-consumer transport only.  Mark a
+   run that cannot execute on the approved hardware as `unexecuted` with its
+   reason.
+
+**Acceptance statement.** A completed T2 result establishes the measured
+transport behavior of the governed workload on its recorded environment.  It
+does not establish Brain/NEWS2 throughput, local or remote persistence,
+InfluxDB capacity, dashboard freshness, notification delivery, reliability
+under faults, clinical suitability, or 25-patient full-system readiness.
 
 ### Agent 3 — Telemetry, recovery, and visualization
 

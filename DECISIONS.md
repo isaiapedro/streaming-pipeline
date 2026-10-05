@@ -5,6 +5,22 @@ decisions, decisions still requiring an accountable owner, and unresolved
 implementation or execution gaps. Completed work belongs in `IMPLEMENTED.md`;
 task sequencing belongs in `IMPLEMENTATION_BLUEPRINT.md`.
 
+## 2026-09-14 — Reference and injection visuals do not expand evidence claims
+
+The distribution tool may render per-signal histogram overlays, a separate
+directional-KL summary, and descriptive Pearson correlation matrices for an
+approved reference extract and a matched synthetic extract. The noise tool may
+render a deterministic presentation-only clean-versus-observed timeline from
+synthetic rows. Neither tool copies source rows into its output.
+
+These visuals demonstrate methodology and generator mechanics; they do not by
+themselves establish reliability, clinical realism, or clinical validity.
+External-reference claims remain blocked by D3. Correlation claims additionally
+remain blocked until D14 freezes cohort matching, time alignment, missing-data
+handling, and the correlation estimand. Noise/dropout presentation outputs are
+not benchmark evidence unless they are incorporated into a separately approved
+experimental protocol.
+
 ## 2026-09-13 — Documentation uses durable authorities, not milestone reports
 
 The maintained documentation set is limited to the workspace behavior
@@ -191,6 +207,31 @@ It reproduced the 450 raw metric rows and derived figures while upgrading the
 run provenance to schema v2. The earlier chain remains historical evidence at
 its own commits; it is no longer the current bounded package identity.
 
+## 2026-09-20 — T2 is the minimum latency and stress evidence tier
+
+T1 is retired from the active latency, throughput, backlog, and stress
+specification. Its historical artifacts remain immutable provenance, but they
+must not be promoted into the manifest, figures, acceptance criteria, or
+dissertation claims. T2 is the minimum tier for transport latency and stress
+evidence; T3 and T4 remain optional higher-load tiers. Functional six-patient
+runtime checks may still run, but they are not performance evidence.
+
+The Personal measurement traceability document formerly dedicated to T1 is
+replaced by `non-latency-results-measurement-traceability.md`. Its active result
+families are scoring robustness, stored-record traceability, data consistency,
+ingestion accounting, and controlled fault tolerance. This replacement does
+not relabel or delete the historical T1 artifact; it removes that artifact from
+the active results specification.
+
+## 2026-09-20 — Protocol comparisons use 10,000 valid samples per transport
+
+The earlier 500-message transport comparison was a convenience-sized
+preliminary run and has no source-backed sample-size justification. Active
+NATS/MQTT/Kafka latency and delivery comparisons use 10,000 valid canonical
+messages per transport per repetition, matching the predeclared Personal
+research metric. Existing 500-message artifacts remain historical preliminary
+evidence and are not silently relabelled as the larger experiment.
+
 ## Decisions requiring an owner
 
 | ID | Owner | Decision required | Blocks |
@@ -198,7 +239,7 @@ its own commits; it is no longer the current bounded package identity.
 | D2 | Dissertation author and methodology reviewer | Freeze dependence-aware paired estimands, Monte Carlo error, interval method, and treatment of non-detection | Inferential A/B/C comparison language |
 | D3 | Author and data-governance owner | Approve an independent reference source, licence/DUA, allowed transformations, and retained provenance | External distribution or realism claims |
 | D4 | Infrastructure owner | Approve the restart, interruption, replay, persistence, and fault-injection matrix; explicitly include or exclude production TLS and multi-broker Kafka | Broader V2 reliability claims |
-| D5 | Author and infrastructure owner | Freeze hardware, limits, duration, repetitions, and T2–T4 targets | Capacity claims beyond T1 |
+| D5 | Author and infrastructure owner | Freeze hardware, limits, duration, repetitions, and T2–T4 targets | Any transport capacity or stress claim |
 | D6 | Privacy and retention owner | Approve retention and verified deletion separately for streams, topics, Influx data, DLQs, alarms, logs, and aggregate evidence | Hosted retention/compliance claims |
 | D7 | Service and credential owner | Select the final Influx organization/bucket/access boundary and confirm historical token rotation without recording either token | Live storage and credential-safety claims |
 | D8 | Telemetry owner and operator | Freeze the reconciliation window, accounting rule, and acceptable discrepancy across broker input, outbox, writes, and stored points | Confirmed-storage and storage-latency claims |
@@ -207,6 +248,7 @@ its own commits; it is no longer the current bounded package identity.
 | D11 | Safety and architecture owner | Keep cloud-to-local suppression out of scope or authorize a separate safety design | Any suppression implementation or claim |
 | D12 | Author and supervisor | Approve the evidence level and limitation wording for each headline result | Dissertation submission or public release |
 | D13 | MQTT service owner | Select the stable Brain client identity, singleton/multi-instance session ownership, and bounded in-memory queue capacity | MQTT crash/restart redelivery implementation and evidence |
+| D14 | Dissertation author and methodology reviewer | Freeze reference/synthetic cohort matching, time alignment, missing-data handling, and Pearson versus rank-based correlation estimand | External inter-signal correlation or realism claims |
 
 ### 2026-09-13 — Benchmark recovery uses one durable per-cell journal
 

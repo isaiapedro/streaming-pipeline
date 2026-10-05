@@ -66,9 +66,9 @@ def test_results_are_json_and_csv_compatible_with_fixed_fields():
     assert csv_rows[0]["transport"] == "nats"
 
 
-@pytest.mark.parametrize("count", [0, 1001])
+@pytest.mark.parametrize("count", [0, 10001])
 def test_payload_count_is_bounded(count):
-    with pytest.raises(ValueError, match="between 1 and 1000"):
+    with pytest.raises(ValueError, match="between 1 and 10000"):
         canonical_payloads(count)
 
 

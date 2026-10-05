@@ -54,11 +54,20 @@ def reconcile_storage(database_path: Path, stored_records: int | None) -> dict:
     receipt_balance_ok = accepted == receipts
     quarantine_balance_ok = quarantined_counter == quarantined
     storage_balance_ok = stored_records is None or stored_records == delivered
+    missing_from_storage = (
+        max(delivered - stored_records, 0) if stored_records is not None else None
+    )
+    excess_in_storage = (
+        max(stored_records - delivered, 0) if stored_records is not None else None
+    )
+    unaccounted_enqueued = enqueued - delivered - pending - quarantined
     historical_accounting_complete = metadata.get("historical_accounting_complete") == "1"
     accounting_started_at_ms = metadata.get("accounting_started_at_ms")
     schema_compatible = not missing_tables and accounting_started_at_ms is not None
+    executed = any((accepted, enqueued, delivered, pending, quarantined, stored_records or 0))
     complete = (
-        integrity == "ok"
+        executed
+        and integrity == "ok"
         and schema_compatible
         and historical_accounting_complete
         and outbox_balance_ok
@@ -70,7 +79,7 @@ def reconcile_storage(database_path: Path, stored_records: int | None) -> dict:
         and stored_records is not None
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "privacy_classification": "aggregate reconciliation; no payloads, identifiers, paths, or error text",
         "integrity": integrity,
@@ -87,6 +96,9 @@ def reconcile_storage(database_path: Path, stored_records: int | None) -> dict:
         "delivered_records": delivered,
         "quarantined_records": quarantined,
         "stored_records": stored_records,
+        "missing_from_storage": missing_from_storage,
+        "excess_in_storage": excess_in_storage,
+        "unaccounted_enqueued_records": unaccounted_enqueued,
         "checks": {
             "source_receipt_balance": receipt_balance_ok,
             "outbox_balance": outbox_balance_ok,
@@ -95,7 +107,11 @@ def reconcile_storage(database_path: Path, stored_records: int | None) -> dict:
             "historical_accounting_complete": historical_accounting_complete,
             "schema_compatible": schema_compatible,
         },
-        "status": "complete" if complete else "incomplete",
+        "status": (
+            "complete" if complete
+            else "unexecuted" if not executed and schema_compatible and historical_accounting_complete
+            else "incomplete"
+        ),
         "interpretation": (
             "Complete requires a database created with accounting enabled, an empty pending/quarantine "
             "queue, and an Influx count since accounting_started_at_ms equal to the delivered counter. "

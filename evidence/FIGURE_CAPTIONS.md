@@ -24,9 +24,9 @@
 - `protocol_latency.png` — Local publish-to-consume P50/P99 for NATS and MQTT
   over 100 messages each. This partial comparison excludes broker restart,
   persistence, packet-level loss, storage, and hosted-network behavior.
-- `scale_status.png` — Target throughput for T1–T4 on a labelled logarithmic
-  scale. Only T1 has an achieved measurement; T2–T4 are explicitly marked
-  unexecuted rather than plotted as zero.
+- `scale_status.png` — Target throughput for the active T2–T4 specification on
+  a labelled logarithmic scale. T1 is retired from latency/stress evidence;
+  unexecuted tiers are never plotted as zero.
 - `traceability_status.png` — Required provenance tags are implemented and
   unit-tested on emitted records, while the live stored-record coverage query
   remains unexecuted. It supports an implementation claim, not 100% live

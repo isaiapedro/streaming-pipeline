@@ -88,10 +88,12 @@ tcc/
 │       ├── datasources/influxdb.yml
 │       └── dashboards/
 │           ├── dashboard.yml
-│           └── vitals.json     # State timeline + per-signal panels
+│           ├── vitals.json     # State timeline + per-signal panels
+│           └── presentation.json # Edge/cloud map + live benchmark replay
 │
 └── scripts/
     ├── create_streams.sh       # NATS JetStream stream/consumer init
+    ├── replay_benchmark_to_influx.py # Presentation-only live CSV replay
     └── create_kafka_topics.sh  # Idempotent research-topic provisioning
 ```
 
@@ -188,12 +190,82 @@ failures fail the test run.
 For synthetic-distribution validation, supply approved reference and synthetic
 CSVs with the five documented signal columns:
 
+For a presentation-only comparison, the open-access MIMIC-III Demo v1.4 can be
+reduced locally without emitting identifiers or timestamps:
+
 ```bash
-python scripts/validate_distributions.py --reference reference.csv \
-  --synthetic synthetic.csv --source-id APPROVED_SOURCE_ID \
-  --transformation-method VERSIONED_METHOD_ID \
-  --out-dir distribution_validation
+curl --fail --location --output .runtime/mimiciii-demo/mimiciii-demo-1.4.zip \
+  https://physionet.org/content/mimiciii-demo/get-zip/1.4/
+.venv/bin/python scripts/extract_mimiciii_demo_vitals.py \
+  --input-zip .runtime/mimiciii-demo/mimiciii-demo-1.4.zip \
+  --output .runtime/presentation/mimiciii-demo-aligned.csv \
+  --provenance .runtime/presentation/mimiciii-demo-aligned.provenance.json
 ```
+
+This demo contains 100 patients selected from patients who eventually died;
+it is useful for demonstrating the comparison method but is not a
+population-representative clinical validation dataset. Source, licensing, and
+citation details are on the official PhysioNet MIMIC-III Demo page.
+
+Generate the demo comparison directly with:
+
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-academic \
+  .venv/bin/python scripts/validate_distributions.py \
+  --reference .runtime/presentation/mimiciii-demo-aligned.csv \
+  --synthetic .runtime/presentation/synthetic-aligned.csv \
+  --source-id PHYSIONET_MIMICIII_DEMO_1_4 \
+  --transformation-method mimiciii-demo-chartevents-6h-median-complete-case-v1 \
+  --out-dir .runtime/presentation/distribution
+```
+
+```bash
+.venv/bin/python scripts/generate_synthetic_validation_data.py
+
+: "${ACADEMIC_MIMIC_CSV:?Set ACADEMIC_MIMIC_CSV to the real approved aligned CSV}"
+: "${ACADEMIC_MIMIC_SOURCE_ID:?Set the approved non-sensitive source identifier}"
+: "${ACADEMIC_ALIGNMENT_METHOD:?Set the real versioned extraction/alignment method}"
+test -f "$ACADEMIC_MIMIC_CSV" && MPLCONFIGDIR=/tmp/matplotlib-academic \
+  .venv/bin/python scripts/validate_distributions.py \
+  --reference "$ACADEMIC_MIMIC_CSV" \
+  --synthetic .runtime/presentation/synthetic-aligned.csv \
+  --source-id "$ACADEMIC_MIMIC_SOURCE_ID" \
+  --transformation-method "$ACADEMIC_ALIGNMENT_METHOD" \
+  --out-dir .runtime/presentation/distribution
+```
+
+This creates the five-signal histogram overlay, a directional KL summary, and
+reference/synthetic/difference correlation heatmaps. The input rows remain
+outside Git; only aggregate figures, metrics, provenance, and hashes are
+eligible for review. Until the source, extraction, alignment, and methodology
+decisions are approved, present these as validation diagnostics rather than
+evidence of clinical reliability.
+
+Show the implemented noise and dropout mechanics on the same synthetic CSV:
+
+```bash
+.venv/bin/python scripts/visualize_noise_injection.py \
+  --input .runtime/presentation/synthetic-aligned.csv \
+  --out-dir .runtime/presentation/noise_injection
+```
+
+The resulting timeline overlays clean values with retained noisy observations
+and explicitly marks spikes and missing samples. It is a deterministic
+presentation aid and does not modify the source CSV or the benchmark evidence.
+
+Serve a generated figure directory on a dynamically selected loopback port:
+
+```bash
+.venv/bin/python scripts/serve_presentation_assets.py benchmarks
+.venv/bin/python scripts/serve_presentation_assets.py distribution
+.venv/bin/python scripts/serve_presentation_assets.py noise
+```
+
+Run only the view needed in each terminal and open the URL printed by the
+command. The server intentionally requests an unused ephemeral port instead of
+reusing a fixed port from the root registry; for example, port `8000` belongs
+to the Planner PIOS API. No new fixed-port allocation is needed for this
+temporary presentation interface.
 
 ### Isolated Kafka/Schema Registry validation comparison
 
@@ -331,6 +403,14 @@ SIGNAL_THRESHOLDS = {
    documented infrastructure and governance prerequisites are satisfied.
 5. Generate release evidence only from a clean, frozen commit; never force an
    outcome by editing a tracked patient profile during a final run.
+
+The extended dissertation gates now include a paired clean/noise/dropout
+scoring matrix, measurable stored-record traceability audit, controlled
+NATS/MQTT recovery matrix, and Kafka restart/rebalance/schema fault model.
+Their implementation and unit tests are not live evidence: each remains
+`unexecuted` in `evidence/manifest.json` until its governed result artifact is
+retained. The operator guide defines the commands, required fields, failure
+status, privacy boundary, and permitted claim level.
 
 ## Operator documentation
 

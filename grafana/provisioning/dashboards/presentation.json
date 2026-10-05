@@ -1,0 +1,146 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_INFLUXDB_CLOUD",
+      "label": "InfluxDB Cloud",
+      "description": "Select the existing Flux datasource during import",
+      "type": "datasource",
+      "pluginId": "influxdb",
+      "pluginName": "InfluxDB"
+    }
+  ],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0"},
+    {"type": "datasource", "id": "influxdb", "name": "InfluxDB", "version": "1.0.0"}
+  ],
+  "uid": "patient-vitals-presentation",
+  "title": "Synthetic Patient Monitoring — Live Presentation",
+  "description": "Presentation view of the edge/cloud runtime path and a clearly labelled replay of governed benchmark results.",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+  },
+  "tags": ["synthetic", "academic", "presentation", "benchmark-replay"],
+  "templating": {
+    "list": [
+      {"name": "bucket", "type": "constant", "query": "__INFLUX_BUCKET__", "hide": 2},
+      {
+        "name": "session",
+        "label": "Presentation session",
+        "type": "query",
+        "datasource": {"type": "influxdb", "uid": "${DS_INFLUXDB_CLOUD}"},
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r._measurement == \"benchmark_demo_progress_v2\" and r._field == \"completed_cells\")\n  |> group()\n  |> distinct(column: \"presentation_session\")\n  |> sort(columns: [\"_value\"], desc: true)",
+        "sort": 3
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "What executes where",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 5},
+      "options": {
+        "mode": "markdown",
+        "content": "## EDGE — local, durable, privacy-controlled\n**Synthetic generators** → Protobuf → **NATS JetStream** → **Brain A/B/C scoring** → SQLite WAL outbox  \n*Broker acknowledgement means the derived batch is durably local.*\n\n⬇ **HTTPS batched delivery** — asynchronous, retryable, separately reconciled\n\n## CLOUD — remote storage and observation\n**InfluxDB Cloud** → Flux queries → **Grafana live dashboard**  \n*A successful Influx write establishes cloud storage; Grafana is the observation layer.*"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Replay completion",
+      "description": "Presentation replay progress, not a new benchmark execution.",
+      "gridPos": {"x": 0, "y": 5, "w": 5, "h": 4},
+      "datasource": {"type": "influxdb", "uid": "${DS_INFLUXDB_CLOUD}"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"benchmark_demo_progress_v2\" and r._field == \"completion_pct\")\n  |> filter(fn: (r) => r.presentation_session =~ /^${session:regex}$/ and r.evidence_mode == \"replay\")\n  |> group()\n  |> last()"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "decimals": 0}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "value", "graphMode": "area", "justifyMode": "auto"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Completed benchmark cells",
+      "description": "Each cell is one scenario × signal seed × noise seed, with all three approaches.",
+      "gridPos": {"x": 5, "y": 5, "w": 5, "h": 4},
+      "datasource": {"type": "influxdb", "uid": "${DS_INFLUXDB_CLOUD}"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"benchmark_demo_progress_v2\" and r._field == \"completed_cells\")\n  |> filter(fn: (r) => r.presentation_session =~ /^${session:regex}$/ and r.evidence_mode == \"replay\")\n  |> group()\n  |> last()"
+      }],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "justifyMode": "auto"}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Detection outcome as results arrive",
+      "description": "Run-level synthetic detection outcome (0 or 1), separated by scoring approach.",
+      "gridPos": {"x": 10, "y": 5, "w": 14, "h": 8},
+      "datasource": {"type": "influxdb", "uid": "${DS_INFLUXDB_CLOUD}"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"benchmark_demo_v2\" and r._field == \"detection_run_rate\")\n  |> filter(fn: (r) => r.presentation_session =~ /^${session:regex}$/ and r.evidence_mode == \"replay\")\n  |> group(columns: [\"approach\"])"
+      }],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1, "custom": {"drawStyle": "points", "pointSize": 7, "showPoints": "always"}}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Detection latency as results arrive",
+      "description": "Synthetic event onset to first new alarm episode; absent values mean the run did not detect the event.",
+      "gridPos": {"x": 0, "y": 9, "w": 10, "h": 8},
+      "datasource": {"type": "influxdb", "uid": "${DS_INFLUXDB_CLOUD}"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"benchmark_demo_v2\" and r._field == \"scoring_detection_latency_ms\")\n  |> filter(fn: (r) => r.presentation_session =~ /^${session:regex}$/ and r.evidence_mode == \"replay\")\n  |> group(columns: [\"approach\"])"
+      }],
+      "fieldConfig": {"defaults": {"unit": "ms", "custom": {"drawStyle": "line", "lineWidth": 2, "showPoints": "always"}}, "overrides": []}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Alarm episodes per patient-day",
+      "description": "Operational alarm burden; lower is preferable only when interpreted together with detection.",
+      "gridPos": {"x": 10, "y": 13, "w": 14, "h": 8},
+      "datasource": {"type": "influxdb", "uid": "${DS_INFLUXDB_CLOUD}"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"benchmark_demo_v2\" and r._field == \"alarm_episode_rate_per_patient_day\")\n  |> filter(fn: (r) => r.presentation_session =~ /^${session:regex}$/ and r.evidence_mode == \"replay\")\n  |> group(columns: [\"approach\"])"
+      }],
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 2, "showPoints": "always"}}, "overrides": []}
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Latest replayed A/B/C result rows",
+      "description": "All values originate from the selected governed benchmark CSV; timestamps show replay order, not experiment time.",
+      "gridPos": {"x": 0, "y": 17, "w": 10, "h": 8},
+      "datasource": {"type": "influxdb", "uid": "${DS_INFLUXDB_CLOUD}"},
+      "targets": [{
+        "refId": "A",
+        "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"benchmark_demo_v2\")\n  |> filter(fn: (r) => r.presentation_session =~ /^${session:regex}$/ and r.evidence_mode == \"replay\")\n  |> filter(fn: (r) => r._field == \"detection_run_rate\" or r._field == \"scoring_detection_latency_ms\" or r._field == \"alarm_episode_rate_per_patient_day\")\n  |> pivot(rowKey: [\"_time\", \"run_id\", \"scenario\", \"approach\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 30)"
+      }],
+      "options": {"showHeader": true}
+    },
+    {
+      "id": 8,
+      "type": "text",
+      "title": "Scientific interpretation",
+      "gridPos": {"x": 0, "y": 25, "w": 24, "h": 4},
+      "options": {
+        "mode": "markdown",
+        "content": "**This screen replays completed synthetic benchmark evidence for presentation.** It does not rerun the experiment and its wall-clock timestamps are not benchmark timestamps. The defensible claim is a **detection-speed versus nuisance-alarm-burden trade-off under synthetic conditions**. It is not evidence of clinical effectiveness, 500-patient scale, or cloud suppression."
+      }
+    }
+  ]
+}

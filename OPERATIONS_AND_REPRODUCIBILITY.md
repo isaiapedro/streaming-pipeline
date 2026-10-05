@@ -40,7 +40,7 @@ The repository must also work from an arbitrary clean-clone location.
 | Aggregation and figures | `scripts/aggregate_benchmark.py` | Validates the 450-row result matrix and generates aggregates/figures | The tracked raw input and current aggregate conform to the frozen matrix contract |
 | Protocol benchmark | `scripts/benchmark_protocol.py` | Compares local NATS and MQTT transport dimensions | Some dimensions require container restart access |
 | Live latency | `scripts/measure_live_latency.py` | Measures publish-to-consume and optional successful-storage latency | Storage is unexecuted when `--skip-storage` is used |
-| Scale tiers | `scripts/run_scale_tier.py` | Exercises isolated NATS transport from T1 through T4 | Transport-only; not full scoring/storage scale |
+| Scale tiers | `scripts/run_scale_tier.py` | Exercises isolated NATS transport from T2 through T4 | T2 is the minimum stress/latency tier; transport-only, not full scoring/storage scale |
 | Distribution validation | `scripts/validate_distributions.py` | Compares approved external and synthetic aggregates | Reference rows remain outside Git |
 | Evidence bundle | `evidence/` | Holds privacy-safe aggregates, figures, manifest, limitations, checksums | A dirty worktree is development evidence only |
 
@@ -299,7 +299,7 @@ brain/tests/test_integration_mqtt.py` for the live invalid-message gate.
 Run the protocol harness only when its declared prerequisites are available:
 
 ```bash
-.venv/bin/python scripts/benchmark_protocol.py --n 100 \
+.venv/bin/python scripts/benchmark_protocol.py --n 10000 \
   --out evidence/protocol_benchmark.csv --skip-restarts
 ```
 
@@ -458,6 +458,24 @@ The notebook may explore or display results, but it is not an authoritative
 transformation. All release tables and figures must be reproducible through
 versioned non-interactive scripts.
 
+### Paired noise, dropout, and scoring matrix
+
+Run the deterministic factorial matrix separately from the frozen 450-row
+benchmark. It pairs every degraded condition with the same scenario, approach,
+signal seed, and noise seed under the clean profile:
+
+```bash
+.venv/bin/python scripts/run_noise_scoring_experiment.py \
+  --signal-seeds 5 --noise-seeds 5 --stable-duration-s 86400 \
+  --clear-hold-ms 10000 --out evidence/noise_scoring_experiment.csv
+```
+
+The CSV retains profile parameters, raw scoring/burden/completeness/recovery
+metrics, and `delta_*_vs_clean` values. A completed file is synthetic V1
+simulation evidence only. It does not measure a live broker, clinical outcome,
+or patient population. Until that artifact is generated from a clean frozen
+commit, the manifest must report `noise_scoring_matrix=unexecuted`.
+
 ## Live evidence runs
 
 ### Publish-to-consume and publish-to-storage latency
@@ -483,23 +501,163 @@ network location, service tier, and configuration with the result.
 
 ### Scale tiers
 
-Run one tier at a time on approved hardware:
+The scale runner has two producer implementations:
+
+- `sequential` (the default) generates five signals per patient on an absolute
+  deadline and waits for each JetStream publish acknowledgement before issuing
+  the next message. Keep this mode for comparison with historical runs.
+- `pipelined` uses the same per-patient deadline scheduler but places generated
+  messages in a bounded queue. A fixed number of workers overlap JetStream
+  publish acknowledgements. `--publish-concurrency` controls the workers and
+  `--producer-queue-size` controls the maximum queued messages; these options do
+  not apply to the sequential implementation.
+
+Run one tier at a time on approved hardware. A sequential example is:
 
 ```bash
-.venv/bin/python scripts/run_scale_tier.py --tier T1 --duration 20 \
+.venv/bin/python scripts/run_scale_tier.py --tier T2 --duration 20 \
   --pull-timeout 0.1 \
+  --producer-mode sequential \
   --csv-out evidence/scale_results.csv \
-  --json-out evidence/scale_T1.json
+  --json-out evidence/scale_T2_sequential_rep01.json
 ```
+
+A corresponding pipelined example is:
+
+```bash
+.venv/bin/python scripts/run_scale_tier.py --tier T2 --duration 20 \
+  --pull-timeout 0.1 \
+  --producer-mode pipelined \
+  --publish-concurrency 256 \
+  --producer-queue-size 4096 \
+  --csv-out evidence/scale_results.csv \
+  --json-out evidence/scale_T2_pipelined_rep01.json
+```
+
+Before an evidentiary run, freeze the tier (or custom patient count and rate),
+duration, pull timeout, producer mode, publish concurrency, queue size, NATS URL
+and configuration, stream storage policy, host/resource limits, software and
+image versions, implementation commit, output directory, repetition count, and
+acceptance rule. Do not tune concurrency or queue size after inspecting results
+from the frozen series. The JSON records the selected producer parameters and
+basic machine context, but the operator must retain the remaining freeze and
+provenance record alongside it.
+
+For a fair sequential-versus-pipelined comparison, use at least five completed
+repetitions per mode with identical frozen parameters other than producer mode
+and its mode-specific controls. Alternate execution order to reduce warm-up and
+time-order bias (`sequential`, `pipelined`, then `pipelined`, `sequential`, and
+so on), use a distinct JSON path for every repetition, and append both modes to
+one newly created CSV. Do not reuse a stream between invocations; the runner
+creates and removes an isolated stream for each run. Report every repetition
+and a predeclared aggregate rather than selecting the best run.
+
+The `producer` object in JSON and the `producer_*` CSV columns record
+`requested`, `generated`, `generation_failed`, `enqueued`,
+`publish_attempted`, `acknowledged`, `publish_failed`, `queue_full_drops`, peak
+queue depth, peak in-flight publishes, missed schedule ticks/messages, and
+mean/maximum schedule lag. `producer_window` freezes the same counters at the
+measurement cutoff; `producer` includes the bounded post-window drain. Inspect
+these conservation relationships for each run:
+
+- in pipelined mode, `generated = enqueued + queue_full_drops`;
+- after the bounded queue has drained normally, `enqueued = publish_attempted`;
+- `requested = generated + generation_failed` and
+  `publish_attempted = acknowledged + publish_failed`;
+- any queue-full drop, failed operation, nonzero final backlog, or material
+  schedule lag/missed-tick count must be reported and cannot be hidden by
+  achieved throughput.
+
+Freeze `--publish-timeout` and `--drain-timeout` as well. A timed-out drain or
+nonzero `outstanding_after_drain` makes the run incomplete. The result does not
+yet persist separate received, decoded, and consumer-acknowledged counts or peak
+backlog. Consequently, the producer counters support producer-side loss and
+saturation checks, but not a complete end-to-end conservation proof.
 
 Repeat explicitly for T2, T3, and T4 with distinct JSON paths. The CSV appends,
 so begin a final series from a newly created run directory rather than editing
-or truncating a historical file. Record requested, attempted, published,
-received, decoded, acknowledged, failed, and peak-backlog counts after the
-harness is upgraded; current results lack some of these diagnostics.
+or truncating a historical file.
 
 Scale tests use an isolated `scale.>` stream and measure transport, not the
-complete scoring and storage system.
+complete scoring and storage system. A pipelined result may support a claim
+about this Python client's ability to feed the isolated NATS JetStream path
+under the frozen local conditions. It does not establish NATS broker capacity,
+clinical-system capacity, superiority over another transport, durability under
+failure, multi-host behavior, or production readiness. Treat bottleneck text
+printed by the runner as a diagnostic hypothesis unless CPU, broker, network,
+and queue observations independently substantiate it.
+
+### Repeated three-transport latency analysis
+
+Use the shared validated-delivery harness when NATS, MQTT, and Kafka must
+appear in one comparison. It establishes each consumer before publication,
+uses the same canonical Protobuf messages and poison record, rotates execution
+order, retains message-level latencies only in memory, and publishes aggregate
+P50 through P99 values:
+
+```bash
+docker compose up -d --wait nats mosquitto
+docker compose --profile kafka up -d --wait kafka schema-registry
+bash scripts/create_streams.sh
+bash scripts/create_kafka_topics.sh
+
+MPLCONFIGDIR=/tmp/matplotlib-academic \
+  .venv/bin/python scripts/analyze_transport_stress.py \
+  --live --count 10000 --repetitions 5 --timeout 60 \
+  --out-dir .runtime/thesis-transport-stress
+```
+
+The output directory contains per-repetition and aggregate CSVs, every integer
+latency percentile from P50 through P99, a logarithmic percentile curve,
+selected-percentile repetition distributions, an operational throughput/tail
+figure, and a bounded `RESULTS.md`. Mean intervals use a deterministic
+2,000-resample bootstrap over repetitions; percentile claims must also display
+the individual repetition distribution because five local repetitions do not
+support broad population inference.
+
+This harness is a low-volume validated-delivery comparison, not the T2 load
+generator. Its completion-throughput number includes client/harness behavior
+and must not be presented as a broker throughput ceiling. Keep restart,
+persistence, memory, framing overhead, network degradation, alarm delivery,
+and scale-tier saturation as separate experiments.
+
+### Controlled transport fault matrices
+
+The fault harnesses define comparable delivery accounting for disconnect,
+broker restart, offline durable recovery, Kafka consumer restart, group
+rebalance, offset replay, and Schema Registry availability. Their unit tests
+prove orchestration and accounting logic; they do not prove broker behavior.
+Execute only through an isolated, explicitly authorized broker adapter and
+retain aggregate JSON outputs as:
+
+- `evidence/nats_mqtt_fault_matrix.json`
+- `evidence/kafka_fault_matrix.json`
+
+Each retained JSON must state its status, clean commit/configuration identity,
+machine context, scenario results, missing/duplicate/unexpected and ordering
+counts, recovery time, resource measurements, timeout status, and unavailable
+reason where applicable. A missing artifact remains `unexecuted`; a partial or
+failed run must not be promoted to `passed`. Broker restart permission does not
+extend to shared or remote infrastructure, and unavailable Schema Registry or
+container control is a recorded limitation rather than a simulated pass.
+
+### Measurable traceability audit
+
+Traceability is established from stored records, not from writer unit tests:
+
+```bash
+.venv/bin/python scripts/audit_traceability.py --input-csv /approved/export.csv \
+  --output evidence/traceability_audit.json --require-complete
+# or, against an explicitly approved configured bucket:
+.venv/bin/python scripts/audit_traceability.py --live --range 1h \
+  --output evidence/traceability_audit.json --require-complete
+```
+
+Schema v2 reports total and complete records, overall/per-tag coverage,
+per-measurement and per-transport coverage, ignored records, unknown version
+counts, and whether known versions are mixed. It never retains identifiers,
+timestamps, tag values, or vital values. Zero eligible records is
+`unexecuted`, never `passed`.
 
 ### Approved-reference distribution validation
 

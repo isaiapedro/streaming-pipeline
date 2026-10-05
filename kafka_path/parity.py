@@ -12,13 +12,16 @@ import asyncio
 import csv
 import io
 import json
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 import nats
+import paho.mqtt.client as mqtt
 from confluent_kafka import Consumer, KafkaException, Producer, TopicPartition
 from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 
@@ -37,9 +40,15 @@ from kafka_path.transport import (
     _produce_and_wait,
 )
 from schema import vitals_pb2
+from scripts.latency_percentiles import (
+    percentile_rows,
+    render_percentile_plot,
+    write_percentile_csv,
+)
 
 
 SYNTHETIC_PATIENT = "P-TRANSPORT-PARITY"
+MQTT_HOST, MQTT_PORT = "127.0.0.1", 1883
 FIELDS = ("transport", "published", "accepted", "rejected", "p50_ms", "p99_ms")
 POISON_PAYLOAD = b"transport-parity-invalid-protobuf"
 
@@ -72,8 +81,8 @@ Runner = Callable[[Sequence[vitals_pb2.VitalSign], float], TransportRun]
 
 def canonical_payloads(count: int) -> tuple[vitals_pb2.VitalSign, ...]:
     """Create synthetic, non-clinical payloads shared by both transports."""
-    if not 1 <= count <= 1_000:
-        raise ValueError("count must be between 1 and 1000")
+    if not 1 <= count <= 10_000:
+        raise ValueError("count must be between 1 and 10000")
     base_ms = int(time.time() * 1000)
     return tuple(
         vitals_pb2.VitalSign(
@@ -186,6 +195,45 @@ async def _run_nats_async(
             ),
             stream="VITALS",
         )
+
+        async def consume() -> None:
+            while time.monotonic() < deadline:
+                try:
+                    records = await subscription.fetch(50, timeout=0.1)
+                except TimeoutError:
+                    continue
+                for record in records:
+                    try:
+                        vital = decode_and_validate(
+                            record.data,
+                            {SYNTHETIC_PATIENT: {}},
+                            source_subject=subject,
+                        )
+                        started = published_at.get(vital.timestamp_ms)
+                        if started is not None:
+                            latencies.append(
+                                (time.perf_counter_ns() - started) / 1_000_000
+                            )
+                    except ValidationError as error:
+                        await js.publish(
+                            DLQ_SUBJECT,
+                            dead_letter(
+                                record.data,
+                                error,
+                                subject,
+                                pipeline_version="transport-parity",
+                            ),
+                            headers={
+                                "Nats-Msg-Id": dead_letter_message_id(
+                                    record.data, subject
+                                )
+                            },
+                        )
+                        if record.data == poison_payload:
+                            latencies.append(None)
+                    await record.ack()
+
+        consume_task = asyncio.create_task(consume())
         for message in messages:
             published_at[message.timestamp_ms] = time.perf_counter_ns()
             await js.publish(subject, message.SerializeToString())
@@ -193,35 +241,9 @@ async def _run_nats_async(
         await js.publish(subject, poison_payload)
         published += 1
         while len(latencies) < published and time.monotonic() < deadline:
-            remaining = max(0.01, deadline - time.monotonic())
-            try:
-                records = await subscription.fetch(1, timeout=remaining)
-            except TimeoutError:
-                break
-            record = records[0]
-            try:
-                vital = decode_and_validate(
-                    record.data,
-                    {SYNTHETIC_PATIENT: {}},
-                    source_subject=subject,
-                )
-                started = published_at.get(vital.timestamp_ms)
-                if started is not None:
-                    latencies.append((time.perf_counter_ns() - started) / 1_000_000)
-            except ValidationError as error:
-                await js.publish(
-                    DLQ_SUBJECT,
-                    dead_letter(
-                        record.data,
-                        error,
-                        subject,
-                        pipeline_version="transport-parity",
-                    ),
-                    headers={"Nats-Msg-Id": dead_letter_message_id(record.data, subject)},
-                )
-                if record.data == poison_payload:
-                    latencies.append(None)
-            await record.ack()
+            await asyncio.sleep(0.005)
+        consume_task.cancel()
+        await asyncio.gather(consume_task, return_exceptions=True)
     finally:
         try:
             if subscription is not None:
@@ -235,6 +257,78 @@ async def _run_nats_async(
 
 def run_nats(messages: Sequence[vitals_pb2.VitalSign], timeout_s: float) -> TransportRun:
     return asyncio.run(_run_nats_async(messages, timeout_s))
+
+
+def run_mqtt(messages: Sequence[vitals_pb2.VitalSign], timeout_s: float) -> TransportRun:
+    """Run the same validated synthetic payloads through local MQTT QoS 1."""
+    topic = f"vitals/{SYNTHETIC_PATIENT}/heart_rate"
+    published_at: dict[int, int] = {}
+    accepted: dict[int, float] = {}
+    poison_seen = False
+    poison_payload = _poison_payload(messages)
+
+    def on_message(_client, _userdata, record):
+        nonlocal poison_seen
+        try:
+            vital = decode_and_validate(
+                record.payload,
+                {SYNTHETIC_PATIENT: {}},
+                source_subject=topic.replace("/", "."),
+            )
+            started = published_at.get(vital.timestamp_ms)
+            if started is not None:
+                accepted[vital.timestamp_ms] = (
+                    time.perf_counter_ns() - started
+                ) / 1_000_000
+        except ValidationError:
+            if record.payload == poison_payload:
+                poison_seen = True
+
+    subscriber = mqtt.Client(
+        mqtt.CallbackAPIVersion.VERSION2,
+        client_id=f"transport-parity-{uuid4().hex}",
+        clean_session=True,
+    )
+    subscriber.on_message = on_message
+    subscriber.connect(MQTT_HOST, MQTT_PORT)
+    subscriber.subscribe(topic, qos=1)
+    subscriber.loop_start()
+
+    publisher = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    publisher.connect(MQTT_HOST, MQTT_PORT)
+    publisher.loop_start()
+    published = 0
+    deadline = time.monotonic() + timeout_s
+    try:
+        for message in messages:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            published_at[message.timestamp_ms] = time.perf_counter_ns()
+            info = publisher.publish(topic, message.SerializeToString(), qos=1)
+            info.wait_for_publish(timeout=min(5.0, remaining))
+            if info.is_published():
+                published += 1
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            info = publisher.publish(topic, poison_payload, qos=1)
+            info.wait_for_publish(timeout=min(5.0, remaining))
+            if info.is_published():
+                published += 1
+        while (
+            len(accepted) + int(poison_seen) < published
+            and time.monotonic() < deadline
+        ):
+            time.sleep(min(0.01, max(0.001, deadline - time.monotonic())))
+    finally:
+        publisher.loop_stop()
+        publisher.disconnect()
+        subscriber.loop_stop()
+        subscriber.disconnect()
+    latencies = tuple(accepted.get(message.timestamp_ms) for message in messages)
+    if published > len(messages):
+        latencies += (None,)
+    return TransportRun(published, latencies)
 
 
 def run_kafka(messages: Sequence[vitals_pb2.VitalSign], timeout_s: float) -> TransportRun:
@@ -274,6 +368,31 @@ def run_kafka(messages: Sequence[vitals_pb2.VitalSign], timeout_s: float) -> Tra
                 partition, timeout=min(5.0, remaining)
             )
             raw_consumer.seek(TopicPartition(partition.topic, partition.partition, high))
+
+        stop_consumer = threading.Event()
+
+        def consume() -> None:
+            nonlocal observed
+            while not stop_consumer.is_set() and time.monotonic() < deadline:
+                record = raw_consumer.poll(0.05)
+                if record is None:
+                    continue
+                if record.error():
+                    continue
+                matched_valid = False
+
+                def observe_current(vital) -> None:
+                    nonlocal matched_valid
+                    before = len(accepted)
+                    observe(vital)
+                    matched_valid = len(accepted) > before
+
+                result = consumer.process_record(record, observe_current)
+                if matched_valid or (result is False and record.value() == poison_payload):
+                    observed += 1
+
+        consume_thread = threading.Thread(target=consume, name="kafka-parity-consumer")
+        consume_thread.start()
         for message in messages:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -293,24 +412,9 @@ def run_kafka(messages: Sequence[vitals_pb2.VitalSign], timeout_s: float) -> Tra
             )
             published += 1
         while observed < published and time.monotonic() < deadline:
-            record = raw_consumer.poll(
-                min(0.25, max(0.01, deadline - time.monotonic()))
-            )
-            if record is None:
-                continue
-            if record.error():
-                raise KafkaException(record.error())
-            matched_valid = False
-
-            def observe_current(vital) -> None:
-                nonlocal matched_valid
-                before = len(accepted)
-                observe(vital)
-                matched_valid = len(accepted) > before
-
-            result = consumer.process_record(record, observe_current)
-            if matched_valid or (result is False and record.value() == poison_payload):
-                observed += 1
+            time.sleep(0.005)
+        stop_consumer.set()
+        consume_thread.join(timeout=2.0)
     finally:
         consumer.close()
     latencies = tuple(accepted.get(message.timestamp_ms) for message in messages)
@@ -330,15 +434,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument("--format", choices=("json", "csv"), default="json")
+    parser.add_argument("--percentiles-out", type=Path,
+                        help="write aggregate P50 through P99 latency values as CSV")
+    parser.add_argument("--plot-out", type=Path,
+                        help="plot the aggregate P50 through P99 latency curves")
     args = parser.parse_args(argv)
     if not args.live:
         parser.error("--live is required; this harness never contacts brokers implicitly")
     messages = canonical_payloads(args.count)
-    results = compare_transports(
-        messages,
-        {"nats": run_nats, "kafka": run_kafka},
-        timeout_s=args.timeout,
+    runners = {"nats": run_nats, "mqtt": run_mqtt, "kafka": run_kafka}
+    runs = {name: runner(messages, args.timeout) for name, runner in runners.items()}
+    results = [summarize(name, run) for name, run in runs.items()]
+    percentile_data = percentile_rows(
+        {name: run.latencies_ms for name, run in runs.items()}
     )
+    if args.percentiles_out:
+        write_percentile_csv(percentile_data, args.percentiles_out)
+    if args.plot_out:
+        render_percentile_plot(
+            percentile_data,
+            args.plot_out,
+            title="Local NATS vs Kafka validated-delivery latency",
+        )
     print(render_results(results, args.format))
     return 0
 

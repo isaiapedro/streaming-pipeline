@@ -28,7 +28,7 @@ Dimensions measured (plan-detailed.md "Comparison Dimensions" table):
      guarantees rather than raw packet loss.
 
 Usage:
-    python scripts/benchmark_protocol.py [--n 500] [--out protocol_benchmark.csv] [--skip-restarts]
+    python scripts/benchmark_protocol.py [--n 10000] [--out protocol_benchmark.csv] [--skip-restarts]
 """
 
 import argparse
@@ -48,6 +48,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import PIPELINE_VERSION, SCHEMA_VERSION
 from schema import vitals_pb2
+from scripts.latency_percentiles import (
+    percentile_rows,
+    render_percentile_plot,
+    write_percentile_csv,
+)
 
 NATS_URL = "nats://localhost:4222"
 MQTT_HOST, MQTT_PORT = "localhost", 1883
@@ -421,7 +426,13 @@ def _docker_memory(container: str) -> str:
 
 # ------------------------------------------------------------------- main ---
 
-async def run(n: int, out_path: Path, skip_restarts: bool) -> None:
+async def run(
+    n: int,
+    out_path: Path,
+    skip_restarts: bool,
+    percentiles_out: Path | None = None,
+    plot_out: Path | None = None,
+) -> None:
     rows = []
 
     print("Measuring baseline delivery latency (P50/P99)...")
@@ -433,6 +444,17 @@ async def run(n: int, out_path: Path, skip_restarts: bool) -> None:
     rows.append({"dimension": "latency_p99_ms", "nats": n_p99, "mqtt": m_p99, "method": "measured", "notes": "live broker, canonical Protobuf"})
     print(f"  NATS  P50={n_p50:.2f}ms P99={n_p99:.2f}ms")
     print(f"  MQTT  P50={m_p50:.2f}ms P99={m_p99:.2f}ms")
+    percentile_data = percentile_rows({"nats": nats_lat, "mqtt": mqtt_lat})
+    if percentiles_out:
+        write_percentile_csv(percentile_data, percentiles_out)
+        print(f"Wrote P50-P99 latency percentiles to {percentiles_out}")
+    if plot_out:
+        render_percentile_plot(
+            percentile_data,
+            plot_out,
+            title="Local NATS vs MQTT publish-to-consume latency",
+        )
+        print(f"Wrote percentile plot to {plot_out}")
 
     print("Wire overhead (analytical, no tcpdump in this environment)...")
     wire = _wire_overhead_table()[0]
@@ -477,9 +499,15 @@ async def run(n: int, out_path: Path, skip_restarts: bool) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--n", type=int, default=500)
+    parser.add_argument("--n", type=int, default=10_000)
     parser.add_argument("--out", type=Path, default=Path("protocol_benchmark.csv"))
     parser.add_argument("--skip-restarts", action="store_true",
                          help="Skip the container-restart-dependent tests (reconnect recovery, persistence, memory)")
+    parser.add_argument("--percentiles-out", type=Path,
+                        help="Write aggregate P50 through P99 latency values as CSV")
+    parser.add_argument("--plot-out", type=Path,
+                        help="Plot the aggregate P50 through P99 latency curves")
     args = parser.parse_args()
-    asyncio.run(run(args.n, args.out, args.skip_restarts))
+    if not 1 <= args.n <= 10_000:
+        parser.error("--n must be between 1 and 10000")
+    asyncio.run(run(args.n, args.out, args.skip_restarts, args.percentiles_out, args.plot_out))

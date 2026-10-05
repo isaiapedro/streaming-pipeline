@@ -369,6 +369,10 @@ def test_local_alarm_preserves_validated_versions_and_adds_audit_headers():
 def test_grafana_assets_have_filters_versions_and_safe_alert(tmp_path):
     root = Path(__file__).parents[2]
     dashboard = json.loads((root / "grafana/provisioning/dashboards/comparison.json").read_text())
+    assert dashboard["__inputs"][0]["name"] == "DS_INFLUXDB_CLOUD"
+    assert {
+        panel["datasource"]["uid"] for panel in dashboard["panels"]
+    } == {"${DS_INFLUXDB_CLOUD}"}
     assert {item["name"] for item in dashboard["templating"]["list"]} >= {
         "patient", "scenario", "approach"
     }
@@ -387,6 +391,12 @@ def test_grafana_assets_have_filters_versions_and_safe_alert(tmp_path):
     assert all("${patient:regex}" in query and "${scenario:regex}" in query and "${approach:regex}" in query for query in queries)
     assert "schema_version" in all_queries
     assert "threshold_version" in all_queries
+    versions = next(panel for panel in dashboard["panels"] if panel["title"] == "Telemetry versions")
+    versions_query = versions["targets"][0]["query"]
+    assert "if exists r.schema_version" in versions_query
+    assert 'else "missing"' in versions_query
+    assert 'r._field == "value"' in versions_query
+    assert 'r._field == "news2_score"' in versions_query
     timing = next(panel for panel in dashboard["panels"] if panel["title"] == "Alarm timing by approach")
     volume = next(panel for panel in dashboard["panels"] if panel["title"].startswith("Alarming observations"))
     for panel in (timing, volume):

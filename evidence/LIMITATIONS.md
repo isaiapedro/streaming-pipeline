@@ -22,10 +22,9 @@
   publish-to-successful-storage P99 values may only come from the live harness.
 - Local Docker measurements do not represent hosted NATS, WAN, or InfluxDB
   behavior. Hosted and local results must be labelled separately.
-- The final T1 run wrote its aggregate files but the NATS client process
-  lingered during shutdown and required interruption. T2–T4 were not rerun on
-  this worktree and remain `unexecuted`; this is an execution-gate limitation,
-  not a failed tier result.
+- Historical T1 artifacts are retained only for provenance and are excluded
+  from latency/stress claims. T2 is the minimum active performance tier; an
+  unexecuted tier is an execution-gate limitation, not a zero or failed result.
 - Distribution similarity depends on an approved reference source and its
   transformation. The declared directional metric is
   KL(P_synthetic || P_reference), calculated over shared histogram bins with

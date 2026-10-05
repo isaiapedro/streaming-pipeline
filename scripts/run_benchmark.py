@@ -152,8 +152,8 @@ def _simulate_run(
                 ews_state.update(signal_type, noisy_value, noisy_ts)
 
             scored_c = score_composite(ews_state, noisy_ts, APPROACH_C)
+            composite_counts[APPROACH_C] += 1
             if scored_c is not None:
-                composite_counts[APPROACH_C] += 1
                 complete_counts[APPROACH_C] += int(scored_c.window_complete)
                 alarming = scored_c.alarm_level != "ok"
                 tracker_timestamps[APPROACH_C] = max(tracker_timestamps[APPROACH_C], noisy_ts)
@@ -165,8 +165,8 @@ def _simulate_run(
 
             if batch_scheduler.due("BENCH-01", noisy_ts):
                 scored_b = score_composite(ews_state, noisy_ts, APPROACH_B)
+                composite_counts[APPROACH_B] += 1
                 if scored_b is not None:
-                    composite_counts[APPROACH_B] += 1
                     complete_counts[APPROACH_B] += int(scored_b.window_complete)
                     alarming = scored_b.alarm_level != "ok"
                     tracker_timestamps[APPROACH_B] = max(tracker_timestamps[APPROACH_B], noisy_ts)

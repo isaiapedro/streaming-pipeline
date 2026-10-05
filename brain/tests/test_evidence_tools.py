@@ -16,6 +16,7 @@ from scripts.build_evidence_manifest import (
     dependency_versions,
     evidence_inventory,
     enforce_final_release,
+    experiment_evidence,
 )
 from scripts.measure_live_latency import percentile, summarize
 from scripts.run_benchmark import (
@@ -26,6 +27,11 @@ from scripts.run_benchmark import (
 )
 import scripts.run_benchmark as benchmark_runner
 from scripts.run_scale_tier import machine_context, write_result
+from scripts.latency_percentiles import (
+    percentile as latency_percentile,
+    percentile_rows,
+    write_percentile_csv,
+)
 
 ROOT = Path(__file__).parents[2]
 
@@ -286,6 +292,39 @@ def test_evidence_inventory_assigns_roles_and_avoids_hash_cycle(tmp_path, monkey
     assert result[1]["generated_by"] == "scripts/aggregate_benchmark.py"
 
 
+def test_experiment_evidence_keeps_missing_runs_unexecuted(tmp_path):
+    result = experiment_evidence(
+        tmp_path / "missing.json", privacy="aggregate only", expected_format="json"
+    )
+    assert result["status"] == "unexecuted"
+    assert result["artifact"] is None
+    assert result["record_count"] is None
+
+
+def test_experiment_evidence_reads_json_status_and_csv_rows(tmp_path):
+    json_path = tmp_path / "faults.json"
+    json_path.write_text(json.dumps({"status": "passed", "results": [{}, {}]}))
+    json_result = experiment_evidence(json_path, privacy="aggregate only", expected_format="json")
+    assert json_result["status"] == "passed"
+    assert json_result["record_count"] == 2
+
+    csv_path = tmp_path / "matrix.csv"
+    csv_path.write_text("experiment_id,value\ncell-1,1\ncell-2,2\n")
+    csv_result = experiment_evidence(csv_path, privacy="synthetic", expected_format="csv")
+    assert csv_result["status"] == "executed"
+    assert csv_result["record_count"] == 2
+
+
+def test_experiment_evidence_marks_empty_or_invalid_artifacts_invalid(tmp_path):
+    empty_csv = tmp_path / "empty.csv"
+    empty_csv.write_text("experiment_id,value\n")
+    assert experiment_evidence(empty_csv, privacy="synthetic", expected_format="csv")["status"] == "invalid"
+
+    invalid_json = tmp_path / "invalid.json"
+    invalid_json.write_text("not-json")
+    assert experiment_evidence(invalid_json, privacy="aggregate", expected_format="json")["status"] == "invalid"
+
+
 def test_manifest_artifact_contract_rejects_short_stable_baseline(tmp_path):
     benchmark_path, run_log_path = _write_artifact_pair(tmp_path, stable_duration_s=600)
     result = benchmark_artifacts(benchmark_path, run_log_path)
@@ -386,3 +425,20 @@ def test_scale_outputs_include_non_identifying_machine_context(tmp_path):
     write_result(result, csv_path, json_path)
     assert list(csv.DictReader(csv_path.open()))[0]["status"] == "executed"
     assert json.loads(json_path.read_text())["machine"] == context
+
+
+def test_latency_percentiles_cover_every_integer_from_p50_through_p99(tmp_path):
+    rows = percentile_rows({"nats": (1.0, 2.0, 3.0, None), "mqtt": (2.0, 4.0, 8.0)})
+    assert {row["percentile"] for row in rows} == set(range(50, 100))
+    assert len(rows) == 100
+    assert latency_percentile((1.0, 2.0, 3.0), 50) == 2.0
+    assert {row["sample_count"] for row in rows if row["transport"] == "nats"} == {3}
+    output = tmp_path / "percentiles.csv"
+    write_percentile_csv(rows, output)
+    written = list(csv.DictReader(output.open()))
+    assert written[0] == {
+        "transport": "nats",
+        "percentile": "50",
+        "latency_ms": "2.0",
+        "sample_count": "3",
+    }

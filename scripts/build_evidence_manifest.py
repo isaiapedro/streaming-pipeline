@@ -22,7 +22,7 @@ from data.scenarios.definitions import SCENARIOS
 from scripts.run_benchmark import DEFAULT_NOISE_SEEDS, DEFAULT_SIGNAL_SEEDS, DEFAULT_STABLE_DURATION_S
 
 ROOT = Path(__file__).parent.parent
-TIERS = {"T1": (6, 1.0), "T2": (24, 100.0), "T3": (50, 250.0), "T4": (100, 250.0)}
+TIERS = {"T2": (24, 100.0), "T3": (50, 250.0), "T4": (100, 250.0)}
 
 
 def machine_context() -> dict:
@@ -133,6 +133,42 @@ def _artifact(path: Path, record_count: int | None = None, role: str = "supporti
     }
 
 
+def experiment_evidence(path: Path, *, privacy: str, expected_format: str) -> dict:
+    """Report an experiment artifact without treating mere implementation as execution."""
+
+    if not path.is_file():
+        return {
+            "status": "unexecuted",
+            "artifact": None,
+            "record_count": None,
+            "privacy": privacy,
+            "reason": "No retained governed result artifact exists.",
+        }
+    try:
+        if expected_format == "json":
+            payload = json.loads(path.read_text())
+            status = payload.get("status", "invalid")
+            record_count = payload.get("record_count")
+            if record_count is None and isinstance(payload.get("results"), list):
+                record_count = len(payload["results"])
+        elif expected_format == "csv":
+            with path.open(newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            status = "executed" if rows else "invalid"
+            record_count = len(rows)
+        else:
+            raise ValueError(f"unsupported experiment format: {expected_format}")
+    except (OSError, json.JSONDecodeError, csv.Error, AttributeError):
+        status, record_count = "invalid", None
+    return {
+        "status": status,
+        "artifact": _display_path(path),
+        "record_count": record_count,
+        "privacy": privacy,
+        "reason": "Status is derived from the retained artifact; implementation and unit tests alone do not count as execution.",
+    }
+
+
 def evidence_inventory(evidence_dir: Path) -> list[dict]:
     """Hash publishable inputs and outputs without creating a manifest hash cycle."""
 
@@ -147,7 +183,6 @@ def evidence_inventory(evidence_dir: Path) -> list[dict]:
         "live_latency.csv": "scripts/measure_live_latency.py",
         "live_latency.json": "scripts/measure_live_latency.py",
         "protocol_benchmark.csv": "scripts/benchmark_protocol.py",
-        "scale_T1.json": "scripts/run_scale_tier.py",
         "scale_results.csv": "scripts/run_scale_tier.py",
     }
     inventory = []
@@ -347,7 +382,7 @@ def build_manifest(
         except (OSError, json.JSONDecodeError):
             reconciliation_status = "invalid"
     return {
-        "manifest_version": 5,
+        "manifest_version": 6,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "privacy_classification": "aggregate and seed-level synthetic experimental evidence; no raw vital values, clinical rows, credentials, hostnames, or Personal-domain data",
         "code": {
@@ -414,6 +449,21 @@ def build_manifest(
             for tier, (patients, hz) in TIERS.items()
         ],
         "live_experiments": {
+            "noise_scoring_matrix": experiment_evidence(
+                ROOT / "evidence" / "noise_scoring_experiment.csv",
+                privacy="aggregate synthetic paired effects; no raw vital time series",
+                expected_format="csv",
+            ),
+            "nats_mqtt_fault_matrix": experiment_evidence(
+                ROOT / "evidence" / "nats_mqtt_fault_matrix.json",
+                privacy="aggregate delivery, recovery, ordering, duplicate, and resource counters",
+                expected_format="json",
+            ),
+            "kafka_fault_matrix": experiment_evidence(
+                ROOT / "evidence" / "kafka_fault_matrix.json",
+                privacy="aggregate delivery, recovery, offset, rebalance, schema, and resource counters",
+                expected_format="json",
+            ),
             "protocol": {
                 "status": "executed_partial" if protocol_path.exists() else "unexecuted",
                 "artifact": "evidence/protocol_benchmark.csv" if protocol_path.exists() else None,
@@ -467,9 +517,9 @@ def build_manifest(
         "commands": {
             "benchmark_raw": "python3 scripts/run_benchmark.py --signal-seeds 5 --noise-seeds 5 --stable-duration-s 86400 --out benchmark_results.csv --run-log evidence/experiment_runs.jsonl",
             "benchmark_aggregate": "python scripts/aggregate_benchmark.py --input benchmark_results.csv --output evidence/benchmark_aggregate.csv --figures-dir evidence/figures",
-            "protocol": "python scripts/benchmark_protocol.py --n 100 --out evidence/protocol_benchmark.csv --skip-restarts",
+            "protocol": "python scripts/benchmark_protocol.py --n 10000 --out evidence/protocol_benchmark.csv --skip-restarts",
             "live_latency": "python scripts/measure_live_latency.py --count 100 --skip-storage --csv-out evidence/live_latency.csv --json-out evidence/live_latency.json",
-            "scale_tier": "python scripts/run_scale_tier.py --tier T1 --duration 10 --pull-timeout 0.1 --nats-url nats://localhost:4222 --csv-out evidence/scale_results.csv --json-out evidence/scale_T1.json",
+            "scale_tier": "python scripts/run_scale_tier.py --tier T2 --duration 20 --pull-timeout 0.1 --nats-url nats://localhost:4222 --csv-out evidence/scale_results.csv --json-out evidence/scale_T2.json",
             "distribution": "python scripts/validate_distributions.py --reference /approved/external/reference.csv --synthetic /approved/external/synthetic.csv --source-id SOURCE_ID --transformation-method METHOD --out-dir evidence/distribution",
             "development_manifest": "python3 scripts/build_evidence_manifest.py --mode development",
             "final_manifest": "python3 scripts/build_evidence_manifest.py --mode final",
@@ -477,6 +527,8 @@ def build_manifest(
             "evidence_status_figure": "MPLCONFIGDIR=/tmp/matplotlib-academic python3 scripts/generate_evidence_status.py",
             "traceability_audit_export": "python3 scripts/audit_traceability.py --input-csv /approved/export.csv --output evidence/traceability_audit.json --require-complete",
             "traceability_audit_live": "python3 scripts/audit_traceability.py --live --range 1h --output evidence/traceability_audit.json --require-complete",
+            "noise_scoring_matrix": "python3 scripts/run_noise_scoring_experiment.py --out evidence/noise_scoring_experiment.csv",
+            "nats_mqtt_fault_matrix": "python3 scripts/run_protocol_fault_experiment.py --live --adapter-module APPROVED_ADAPTER_MODULE --implementation-commit CLEAN_COMMIT --config /approved/non-secret-config.json --output evidence/nats_mqtt_fault_matrix.json",
             "outbox_health": "python3 scripts/audit_outbox.py --database .runtime/influx_outbox.sqlite3 --output evidence/outbox_health.json --require-healthy",
             "storage_reconciliation": "python3 scripts/reconcile_storage.py --database .runtime/influx_outbox.sqlite3 --stored-count COUNT --output evidence/storage_reconciliation.json --require-complete",
             "tests": "python3 -m pytest -q",

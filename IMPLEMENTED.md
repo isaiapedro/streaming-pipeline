@@ -12,6 +12,51 @@ The software supports controlled synthetic research claims only. It does not
 establish clinical effectiveness, diagnostic accuracy, production readiness,
 hospital-scale capacity, or suitability for real patient data.
 
+## 2026-09-20 — Extended experiment implementation
+
+- A deterministic paired scoring matrix crosses clean, packet-loss, spike,
+  dropout, jitter, and combined profiles with declared loss/dropout levels and
+  reports raw plus clean-paired detection, latency, alarm burden, window
+  completeness, and recovery effects.
+- Traceability audit schema v2 reports measurable total/per-tag,
+  per-measurement, and per-transport completeness plus unknown/mixed version
+  counts; zero eligible records remains `unexecuted`.
+- A transport-neutral NATS/MQTT fault harness measures disconnect, broker
+  restart, offline durable recovery, loss, duplicates, ordering, recovery time,
+  and resource snapshots. Its governed runner requires an explicitly approved
+  live adapter and atomically retains only clearly validated status.
+- Kafka fault APIs cover broker restart, consumer restart, group rebalance,
+  partition-local offset replay/order accounting, and Schema Registry
+  available/outage/compatible/incompatible outcomes.
+- These bullets describe implemented and unit-tested capability, not completed
+  live experiments. The noise, NATS/MQTT fault, Kafka fault, and stored
+  traceability result entries stay `unexecuted` until governed artifacts exist.
+
+## 2026-09-14 — Presentation visualization tooling
+
+- Distribution validation now emits a five-signal histogram overlay, a
+  separate directional-KL chart, reference and synthetic Pearson correlation
+  heatmaps with their difference matrix, aggregate CSVs, and privacy-safe
+  provenance.
+- An identifier-free deterministic generator creates the local aligned
+  synthetic CSV needed by the visualization commands and records that its
+  baseline grid is not the asynchronous runtime cadence.
+- A deterministic presentation-only noise/dropout renderer applies the actual
+  `NoiseInjector` implementation to an operator-supplied synthetic CSV and
+  marks retained observations, injected spikes, dropped samples, and clock
+  jitter without copying source rows.
+- A bounded static presentation server exposes only the known benchmark,
+  distribution, or noise artifact directory on loopback and requests a
+  dynamic port, preserving the root registry's fixed-port ownership.
+- A local reducer converts the open-access MIMIC-III Demo v1.4 CHARTEVENTS
+  table into identifier-free six-hour median complete cases for presentation
+  diagnostics, with source/method/hash provenance and an explicit cohort-bias
+  limitation. The source and reduced rows remain under ignored `.runtime/`.
+- Automated tests cover matrix shape, aggregate-only outputs, and deterministic
+  injection output. The open-demo diagnostic is not independent or
+  representative external validation; D3 and D14 continue to block realism
+  claims.
+
 ## Delivery summary
 
 | Lane | Completed delivery |
@@ -200,6 +245,9 @@ hospital-scale capacity, or suitability for real patient data.
 
 ## Verification completed
 
+- Current extended-experiment development tree: **288 passed, 5 explicitly
+  skipped**. The skipped tests are opt-in live infrastructure gates; the new
+  experiment artifact statuses remain `unexecuted` as documented above.
 - Earlier integrated development-tree suite: **237 passed, 5 explicitly skipped**.
 - Current integrated development-tree suite: **239 passed, 5 explicitly skipped**.
 - The post-attestation Agent 1 regression set passed **75 tests**, with one

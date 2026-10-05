@@ -217,7 +217,7 @@ Full isolated run:
 
 ```bash
 .venv/bin/python scripts/benchmark_protocol.py \
-  --n 500 \
+  --n 10000 \
   --out evidence/protocol_benchmark.csv
 ```
 
@@ -288,43 +288,115 @@ docker compose up -d --wait nats
 bash scripts/create_streams.sh
 
 .venv/bin/python scripts/run_scale_tier.py \
-  --tier T1 --duration 20 --pull-timeout 0.1 \
+  --tier T2 --duration 20 --pull-timeout 0.1 \
   --csv-out evidence/scale_results.csv \
-  --json-out evidence/scale_T1.json
+  --json-out evidence/scale_T2.json
 ```
 
-Repeat with `--tier T2/T3/T4` and distinct JSON names. The CSV appends, so a
+Repeat with `--tier T3/T4` and distinct JSON names. The CSV appends, so a
 final series must start in a fresh run directory. T2–T4 require approved
 hardware and limits. This harness uses an isolated `scale.>` stream and a
 lightweight consumer; it measures transport, not scoring plus storage.
 
-Current T1: target 30 messages/s, achieved 29.98, P50 11.26 ms, P99 14.94 ms,
-zero backlog. Generate `scale_status.png` with
-`generate_evidence_status.py`. Target crosses for T2–T4 are not
-measurements; do not interpolate to them or claim 500-patient readiness.
+T1 latency and stress measurements are retired from the specification and must
+not support dissertation claims. Generate `scale_status.png` with
+`generate_evidence_status.py`. T2 is the minimum evidentiary transport stress
+tier; unexecuted T3–T4 targets are not measurements and must not be interpolated.
 
 ## Distribution validation and figure
 
 The approved reference and synthetic CSVs must contain `heart_rate`,
 `spo2`, `systolic_bp`, `respiratory_rate`, and `temperature`.
 
+For a non-credentialed presentation diagnostic, download the official
+open-access MIMIC-III Demo v1.4 and reduce CHARTEVENTS to identifier-free
+six-hour median complete cases:
+
+```bash
+curl --fail --location --output .runtime/mimiciii-demo/mimiciii-demo-1.4.zip \
+  https://physionet.org/content/mimiciii-demo/get-zip/1.4/
+.venv/bin/python scripts/extract_mimiciii_demo_vitals.py \
+  --input-zip .runtime/mimiciii-demo/mimiciii-demo-1.4.zip \
+  --output .runtime/presentation/mimiciii-demo-aligned.csv \
+  --provenance .runtime/presentation/mimiciii-demo-aligned.provenance.json
+```
+
+The demo cohort is 100 patients selected from patients who eventually died.
+Label all resulting figures as MIMIC-III Demo diagnostics; they are not
+population-representative external validation.
+
 ```bash
 MPLCONFIGDIR=/tmp/matplotlib-academic \
   .venv/bin/python scripts/validate_distributions.py \
-  --reference /approved/read-only/reference.csv \
-  --synthetic /approved/read-only/synthetic.csv \
-  --source-id APPROVED_SOURCE_ID \
-  --transformation-method VERSIONED_METHOD_ID \
-  --out-dir evidence/distribution
+  --reference .runtime/presentation/mimiciii-demo-aligned.csv \
+  --synthetic .runtime/presentation/synthetic-aligned.csv \
+  --source-id PHYSIONET_MIMICIII_DEMO_1_4 \
+  --transformation-method mimiciii-demo-chartevents-6h-median-complete-case-v1 \
+  --out-dir .runtime/presentation/distribution
 ```
 
-Outputs are `synthetic_vs_reference.png`, `kl_divergence.csv`, and
-`provenance.json`. Source rows stay outside Git. Smaller KL means closer
-histograms under the declared bins/smoothing, not clinical validity.
+Generate a deterministic, identifier-free aligned synthetic input when the
+approved comparison method calls for the repository's baseline profile mix:
+
+```bash
+.venv/bin/python scripts/generate_synthetic_validation_data.py \
+  --output .runtime/presentation/synthetic-aligned.csv
+```
+
+Its `aligned-baseline-grid-v1` method is not the asynchronous runtime cadence.
+It must be matched to the approved reference extraction before it can support
+an external-validation claim.
+
+```bash
+: "${ACADEMIC_MIMIC_CSV:?Set ACADEMIC_MIMIC_CSV to the real approved aligned CSV}"
+: "${ACADEMIC_MIMIC_SOURCE_ID:?Set the approved non-sensitive source identifier}"
+: "${ACADEMIC_ALIGNMENT_METHOD:?Set the real versioned extraction/alignment method}"
+test -f "$ACADEMIC_MIMIC_CSV" && MPLCONFIGDIR=/tmp/matplotlib-academic \
+  .venv/bin/python scripts/validate_distributions.py \
+  --reference "$ACADEMIC_MIMIC_CSV" \
+  --synthetic .runtime/presentation/synthetic-aligned.csv \
+  --source-id "$ACADEMIC_MIMIC_SOURCE_ID" \
+  --transformation-method "$ACADEMIC_ALIGNMENT_METHOD" \
+  --out-dir .runtime/presentation/distribution
+```
+
+Outputs are `synthetic_vs_reference.png`, `kl_divergence.png`,
+`kl_divergence.csv`, `inter_signal_correlation.png`,
+`correlation_matrix.csv`, and `provenance.json`. Source rows stay outside Git.
+Smaller KL means closer histograms under the declared bins/smoothing, not
+clinical validity. Pearson heatmaps are descriptive and require matched
+sampling/alignment plus D14 approval before supporting a realism claim.
 
 The implementation records `KL(P_synthetic || P_reference)`. Do not cite KL
 until a methodology decision freezes direction, bins, smoothing,
 transformation, and source approval.
+
+For a presentation-only view of how the implemented noise wrapper transforms
+the synthetic input, write outside `evidence/`:
+
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-academic \
+  .venv/bin/python scripts/visualize_noise_injection.py \
+  --input .runtime/presentation/synthetic-aligned.csv \
+  --out-dir .runtime/presentation/noise_injection
+```
+
+To display generated assets in a browser, use the bounded presentation server:
+
+```bash
+.venv/bin/python scripts/serve_presentation_assets.py benchmarks
+.venv/bin/python scripts/serve_presentation_assets.py distribution
+.venv/bin/python scripts/serve_presentation_assets.py noise
+```
+
+Each invocation prints an unused loopback URL selected dynamically. Do not use
+port `8000`: the root port registry assigns it to the Planner PIOS API. A real
+approved reference CSV must be supplied to distribution validation; an example
+path in documentation is not a dataset and must not be exported as one.
+
+The generated timeline marks retained values, injected spikes, missing samples,
+and clock jitter. It demonstrates a controlled mechanism, not real sensor-noise
+fidelity and not a rerun of the A/B/C benchmark.
 
 ## Traceability and outbox collection
 

@@ -8,6 +8,21 @@ observation panel is deliberately not called an episode rate. The dashboard
 reads runtime telemetry from InfluxDB; dissertation aggregate figures remain
 under `evidence/` and are not misrepresented as live measurements.
 
+`presentation.json` makes the edge-to-cloud boundary explicit and displays a
+human-paced replay of the already-generated benchmark rows. The replay is a
+presentation aid, not a fresh experiment and not dissertation evidence. Start
+it after importing or provisioning the dashboard:
+
+```bash
+.venv/bin/python scripts/replay_benchmark_to_influx.py --interval 2
+```
+
+The command prints its presentation session name. Select that session in the
+dashboard if Grafana does not select the newest value automatically. Validate
+the CSV and generated points without contacting InfluxDB with `--dry-run`.
+The dashboard refreshes every five seconds, matching the minimum accepted by
+the target Grafana Cloud stack.
+
 Validate the assets without contacting Grafana:
 
 ```bash
@@ -25,9 +40,15 @@ INFLUX_BUCKET=approved-bucket .venv/bin/python scripts/render_grafana_assets.py
 Use `.runtime/grafana/provisioning` as the provisioning source. The committed
 dashboard and alert files are templates and intentionally retain the
 `__INFLUX_BUCKET__` marker. Rendering validates every template before writing
-and emits the datasource, dashboard provider, both dashboards, and alert rules;
+and emits the datasource, dashboard provider, all three dashboards, and alert rules;
 mount or upload the entire rendered directory rather than individual JSON
 files.
+
+When importing through Grafana Cloud, use the rendered `comparison.json` or
+`presentation.json` under `.runtime/grafana/provisioning/dashboards`, then
+select the existing InfluxDB datasource in the `InfluxDB Cloud` import field.
+The dashboards use an import-time datasource input instead of assuming a
+deployment-specific UID.
 
 `alerting/rules.yml` contains a paused synthetic critical-event rule. It has no
 contact point or secret. Configure an approved destination outside Git, run a
